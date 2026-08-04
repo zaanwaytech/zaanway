@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import Link from "next/link";
 import { FaWhatsapp, FaRobot, FaProjectDiagram, FaChartLine, FaPlug, FaChartBar, FaArrowRight } from "react-icons/fa";
 
 const FeaturesSection = () => {
@@ -10,7 +11,7 @@ const FeaturesSection = () => {
       description: "Automate replies, broadcasts, lead capture, and CRM sync.",
       icon: <FaWhatsapp className="w-6 h-6 text-emerald-500" />,
       color: "bg-emerald-50",
-      link: "#"
+      link:"/whatsapp"
     },
     {
       title: "AI Agents",
@@ -82,10 +83,13 @@ const FeaturesSection = () => {
               <p className="text-gray-600 mb-6 leading-relaxed">
                 {feature.description}
               </p>
-              <a href={feature.link} className="inline-flex items-center gap-1.5 text-sm font-semibold text-emerald-600 hover:text-emerald-700">
-                Learn more
-                <FaArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
-              </a>
+             <Link
+  href={feature.link}
+  className="inline-flex items-center gap-1.5 text-sm font-semibold text-emerald-600 hover:text-emerald-700"
+>
+  Learn more
+  <FaArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
+</Link>
             </div>
           ))}
         </div>
