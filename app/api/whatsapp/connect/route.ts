@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { connectDB } from "@/lib/mongodb";
+import User from "@/models/User";
 
 export async function POST(req: NextRequest) {
   try {
@@ -10,7 +12,6 @@ export async function POST(req: NextRequest) {
       wabaId,
       phoneNumberId,
     } = body;
-
 
     if (!code || !businessId || !wabaId || !phoneNumberId) {
       return NextResponse.json(
@@ -24,67 +25,49 @@ export async function POST(req: NextRequest) {
       );
     }
 
-
     console.log("========== WhatsApp Signup ==========");
-
     console.log("Authorization Code:", code);
     console.log("Business ID:", businessId);
     console.log("WABA ID:", wabaId);
     console.log("Phone Number ID:", phoneNumberId);
-
     console.log("=====================================");
 
+    // Save WhatsApp connection details in MongoDB
+    await connectDB();
+    
+    let user = await User.findOne();
+    if (!user) {
+      user = new User({
+        name: "Admin",
+        email: "admin@zaanway.com",
+      });
+    }
 
-    /*
-      NEXT STEPS:
-
-      1. Exchange authorization code with Meta
-      2. Get customer access token
-      3. Subscribe your app to customer's WABA
-      4. Save customer WhatsApp details in MongoDB
-
-
-      MongoDB example:
-
-      {
-        businessId,
-        wabaId,
-        phoneNumberId,
-        connected:true
-      }
-
-    */
-
+    user.whatsappConnected = true;
+    user.phoneNumberId = phoneNumberId;
+    user.wabaId = wabaId;
+    user.businessId = businessId;
+    await user.save();
 
     return NextResponse.json({
       success: true,
-
-      message:
-        "WhatsApp signup data received successfully",
-
-      whatsapp:{
+      message: "WhatsApp signup details updated in database successfully",
+      whatsapp: {
         businessId,
         wabaId,
         phoneNumberId,
       }
     });
 
-
-  } catch(error){
-
-    console.error(
-      "WhatsApp Connect Error:",
-      error
-    );
-
-
+  } catch (error: any) {
+    console.error("WhatsApp Connect Error:", error);
     return NextResponse.json(
       {
-        success:false,
-        message:"Internal server error"
+        success: false,
+        message: error.message || "Internal server error"
       },
       {
-        status:500
+        status: 500
       }
     );
   }

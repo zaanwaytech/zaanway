@@ -6,7 +6,7 @@ import TurfSettings from "@/models/TurfSettings";
 
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN!;
 const ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN!;
-const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID!;
+const DEFAULT_PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID!;
 const API_VERSION = process.env.META_API_VERSION || "v23.0";
 
 // Meta webhook verification
@@ -46,6 +46,11 @@ export async function POST(req: NextRequest) {
       body?.entry?.[0]?.changes?.[0]?.value?.contacts?.[0]?.profile?.name ||
       "Customer";
 
+    // Extract dynamic targeted phone ID from metadata (falls back to configured env ID)
+    const phoneId =
+      body?.entry?.[0]?.changes?.[0]?.value?.metadata?.phone_number_id ||
+      DEFAULT_PHONE_NUMBER_ID;
+
     // 1. Handle interactive message callbacks
     if (message.type === "interactive") {
       const interactive = message.interactive;
@@ -53,7 +58,7 @@ export async function POST(req: NextRequest) {
       if (interactive?.type === "button_reply") {
         const btnId = interactive.button_reply?.id;
         if (btnId === "book_now") {
-          await handleBookNow(from);
+          await handleBookNow(from, phoneId);
           return NextResponse.json({ success: true });
         }
       }
@@ -61,7 +66,7 @@ export async function POST(req: NextRequest) {
       if (interactive?.type === "list_reply") {
         const listId = interactive.list_reply?.id;
         if (listId && listId.startsWith("slot|")) {
-          await handleSlotSelection(from, profileName, listId);
+          await handleSlotSelection(from, profileName, listId, phoneId);
           return NextResponse.json({ success: true });
         }
       }
@@ -71,9 +76,9 @@ export async function POST(req: NextRequest) {
 
     // 2. Handle standard text messages
     const text = message.text?.body?.toLowerCase()?.trim() || "";
-    console.log("Message from:", from, "Text:", text);
+    console.log("Message from:", from, "Text:", text, "Target Phone ID:", phoneId);
 
-    await handleTextMessage(from, text, profileName);
+    await handleTextMessage(from, text, profileName, phoneId);
 
     return NextResponse.json({ success: true });
   } catch (error) {
@@ -86,9 +91,9 @@ export async function POST(req: NextRequest) {
 }
 
 // Send standard text message
-async function sendWhatsAppMessage(to: string, message: string) {
+async function sendWhatsAppMessage(to: string, message: string, phoneId: string) {
   const response = await fetch(
-    `https://graph.facebook.com/${API_VERSION}/${PHONE_NUMBER_ID}/messages`,
+    `https://graph.facebook.com/${API_VERSION}/${phoneId}/messages`,
     {
       method: "POST",
       headers: {
@@ -111,10 +116,11 @@ async function sendWhatsAppButtonMessage(
   to: string,
   headerText: string,
   bodyText: string,
-  buttons: { id: string; title: string }[]
+  buttons: { id: string; title: string }[],
+  phoneId: string
 ) {
   const response = await fetch(
-    `https://graph.facebook.com/${API_VERSION}/${PHONE_NUMBER_ID}/messages`,
+    `https://graph.facebook.com/${API_VERSION}/${phoneId}/messages`,
     {
       method: "POST",
       headers: {
@@ -157,10 +163,11 @@ async function sendWhatsAppListMessage(
   headerText: string,
   bodyText: string,
   buttonText: string,
-  sections: { title: string; rows: { id: string; title: string; description?: string }[] }[]
+  sections: { title: string; rows: { id: string; title: string; description?: string }[] }[],
+  phoneId: string
 ) {
   const response = await fetch(
-    `https://graph.facebook.com/${API_VERSION}/${PHONE_NUMBER_ID}/messages`,
+    `https://graph.facebook.com/${API_VERSION}/${phoneId}/messages`,
     {
       method: "POST",
       headers: {
@@ -200,14 +207,14 @@ async function sendWhatsAppListMessage(
 }
 
 // Handle text messages (keyword matching or welcome)
-async function handleTextMessage(from: string, text: string, profileName: string) {
+async function handleTextMessage(from: string, text: string, profileName: string, phoneId: string) {
   await connectDB();
 
   // A. Check for custom keywords first
   if (text) {
     const keywordRule = await Keyword.findOne({ keyword: text });
     if (keywordRule) {
-      await sendWhatsAppMessage(from, keywordRule.reply);
+      await sendWhatsAppMessage(from, keywordRule.reply, phoneId);
       return;
     }
   }
@@ -226,12 +233,13 @@ async function handleTextMessage(from: string, text: string, profileName: string
     welcomeMsg,
     [
       { id: "book_now", title: "Book Now 📅" }
-    ]
+    ],
+    phoneId
   );
 }
 
 // Handle "Book Now" click - list available slots
-async function handleBookNow(from: string) {
+async function handleBookNow(from: string, phoneId: string) {
   await connectDB();
 
   const settings = await TurfSettings.findOne();
@@ -243,7 +251,8 @@ async function handleBookNow(from: string) {
   if (rows.length === 0) {
     await sendWhatsAppMessage(
       from,
-      `Sorry! No slots are available for booking at the moment. Please check back later.`
+      `Sorry! No slots are available for booking at the moment. Please check back later.`,
+      phoneId
     );
     return;
   }
@@ -264,16 +273,17 @@ async function handleBookNow(from: string) {
         title: "Slots",
         rows,
       },
-    ]
+    ],
+    phoneId
   );
 }
 
 // Handle slot list selection
-async function handleSlotSelection(from: string, profileName: string, listId: string) {
+async function handleSlotSelection(from: string, profileName: string, listId: string, phoneId: string) {
   const [, dateStr, timeSlot] = listId.split("|");
 
   if (!dateStr || !timeSlot) {
-    await sendWhatsAppMessage(from, "Something went wrong with the slot selection. Please try again.");
+    await sendWhatsAppMessage(from, "Something went wrong with the slot selection. Please try again.", phoneId);
     return;
   }
 
@@ -284,7 +294,8 @@ async function handleSlotSelection(from: string, profileName: string, listId: st
   if (existing) {
     await sendWhatsAppMessage(
       from,
-      `Sorry, that slot (${timeSlot}) was just booked. Please try again by typing "hi".`
+      `Sorry, that slot (${timeSlot}) was just booked. Please try again by typing "hi".`,
+      phoneId
     );
     return;
   }
@@ -305,7 +316,8 @@ async function handleSlotSelection(from: string, profileName: string, listId: st
 
   await sendWhatsAppMessage(
     from,
-    `✅ *Booking Confirmed!*\n\nThank you, ${profileName}.\n\n📅 *Date:* ${formattedDateStr}\n⏰ *Time:* ${timeSlot}\n📍 *Location:* ABC Turf\n\nWe look forward to seeing you! ⚽🏏`
+    `✅ *Booking Confirmed!*\n\nThank you, ${profileName}.\n\n📅 *Date:* ${formattedDateStr}\n⏰ *Time:* ${timeSlot}\n📍 *Location:* ABC Turf\n\nWe look forward to seeing you! ⚽🏏`,
+    phoneId
   );
 }
 

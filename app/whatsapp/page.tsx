@@ -53,6 +53,13 @@ export default function WhatsAppPage() {
   });
   const [keywords, setKeywords] = useState<KeywordRule[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
+  const [status, setStatus] = useState<{
+    connected: boolean;
+    displayPhoneNumber?: string;
+    verifiedName?: string;
+    platform?: string;
+    error?: any;
+  } | null>(null);
 
   const [newKeyword, setNewKeyword] = useState("");
   const [newReply, setNewReply] = useState("");
@@ -84,6 +91,15 @@ export default function WhatsAppPage() {
       const bookingsData = await bookingsRes.json();
       if (bookingsData.success) {
         setBookings(bookingsData.bookings);
+      }
+
+      // Fetch Connection Status
+      try {
+        const statusRes = await fetch("/api/whatsapp/status");
+        const statusData = await statusRes.json();
+        setStatus(statusData);
+      } catch (err) {
+        console.error("Error fetching connection status:", err);
       }
     } catch (error) {
       console.error("Error fetching dashboard data:", error);
@@ -221,6 +237,27 @@ export default function WhatsAppPage() {
             <div className="mt-6">
               <ConnectWhatsAppButton />
             </div>
+            {status && (
+              <div className="mt-6 p-4 rounded-xl border border-gray-100 bg-gray-50 space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className={`w-3.5 h-3.5 rounded-full ${status.connected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></span>
+                  <span className="font-bold text-sm text-gray-800">
+                    {status.connected ? "Active WhatsApp Link" : "Meta Link Inactive"}
+                  </span>
+                </div>
+                {status.connected ? (
+                  <div className="text-xs text-gray-600 space-y-1 pt-1 border-t border-gray-200">
+                    <div><strong>Name:</strong> {status.verifiedName}</div>
+                    <div><strong>Number:</strong> {status.displayPhoneNumber}</div>
+                    <div><strong>Engine:</strong> {status.platform}</div>
+                  </div>
+                ) : (
+                  <div className="text-xs text-red-500 pt-1 border-t border-gray-200">
+                    <strong>Notice:</strong> Please configure your Meta credentials or complete connection.
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Setup / Features Summary */}
