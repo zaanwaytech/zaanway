@@ -19,7 +19,10 @@ export async function GET(req: NextRequest) {
 
   if (mode === "subscribe" && token === VERIFY_TOKEN) {
     console.log("✅ Webhook Verified");
-    return new NextResponse(challenge, { status: 200 });
+    return new Response(challenge, {
+      status: 200,
+      headers: { "Content-Type": "text/plain" },
+    });
   }
 
   return NextResponse.json(
@@ -42,9 +45,21 @@ export async function POST(req: NextRequest) {
     }
 
     const from = message.from;
-    const profileName =
-      body?.entry?.[0]?.changes?.[0]?.value?.contacts?.[0]?.profile?.name ||
-      "Customer";
+    const displayPhoneNumber = body?.entry?.[0]?.changes?.[0]?.value?.metadata?.display_phone_number;
+
+    // Ignore messages sent by the business itself to avoid infinite loops or self-bookings
+    const cleanFrom = from.replace(/\D/g, "");
+    const cleanDisplayPhone = displayPhoneNumber ? displayPhoneNumber.replace(/\D/g, "") : null;
+    if (cleanDisplayPhone && cleanFrom === cleanDisplayPhone) {
+      console.log("Ignoring message sent from the business itself.");
+      return NextResponse.json({ success: true });
+    }
+
+    // Safely look up the contact matching the sender's phone number
+    const contact = body?.entry?.[0]?.changes?.[0]?.value?.contacts?.find(
+      (c: any) => c.wa_id === from
+    );
+    const profileName = contact?.profile?.name || "Customer";
 
     // Extract dynamic targeted phone ID from metadata (falls back to configured env ID)
     const phoneId =
