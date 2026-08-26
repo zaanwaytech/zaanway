@@ -65,6 +65,7 @@ export async function POST(req: NextRequest) {
     await connectDB();
     const user = await User.findOne({ phoneNumberId: phoneId });
     const accessToken = user?.accessToken || ACCESS_TOKEN;
+    const userId = user ? user._id.toString() : null;
 
     // Safely look up the contact matching the sender's phone number
     const contact = body?.entry?.[0]?.changes?.[0]?.value?.contacts?.find(
@@ -79,7 +80,7 @@ export async function POST(req: NextRequest) {
       if (interactive?.type === "button_reply") {
         const btnId = interactive.button_reply?.id;
         if (btnId === "book_now") {
-          await handleBookNow(from, phoneId, accessToken);
+          await handleBookNow(from, phoneId, accessToken, userId);
           return NextResponse.json({ success: true });
         }
       }
@@ -87,7 +88,7 @@ export async function POST(req: NextRequest) {
       if (interactive?.type === "list_reply") {
         const listId = interactive.list_reply?.id;
         if (listId && listId.startsWith("slot|")) {
-          await handleSlotSelection(from, profileName, listId, phoneId, accessToken);
+          await handleSlotSelection(from, profileName, listId, phoneId, accessToken, userId);
           return NextResponse.json({ success: true });
         }
       }
@@ -99,7 +100,7 @@ export async function POST(req: NextRequest) {
     const text = message.text?.body?.toLowerCase()?.trim() || "";
     console.log("Message from:", from, "Text:", text, "Target Phone ID:", phoneId);
 
-    await handleTextMessage(from, text, profileName, phoneId, accessToken);
+    await handleTextMessage(from, text, profileName, phoneId, accessToken, userId);
 
     return NextResponse.json({ success: true });
   } catch (error) {
@@ -230,12 +231,13 @@ async function sendWhatsAppListMessage(
 }
 
 // Handle text messages (keyword matching or welcome)
-async function handleTextMessage(from: string, text: string, profileName: string, phoneId: string, accessToken: string) {
+async function handleTextMessage(from: string, text: string, profileName: string, phoneId: string, accessToken: string, userId: string | null) {
   await connectDB();
 
   // A. Check for custom keywords first
   if (text) {
-    const keywordRule = await Keyword.findOne({ keyword: text });
+    const query = userId ? { userId, keyword: text } : { userId: { $exists: false }, keyword: text };
+    const keywordRule = await Keyword.findOne(query);
     if (keywordRule) {
       await sendWhatsAppMessage(from, keywordRule.reply, phoneId, accessToken);
       return;
@@ -243,7 +245,8 @@ async function handleTextMessage(from: string, text: string, profileName: string
   }
 
   // B. Default welcome message + Book Now button
-  const settings = await TurfSettings.findOne();
+  const settingsQuery = userId ? { userId } : { userId: { $exists: false } };
+  const settings = await TurfSettings.findOne(settingsQuery);
   const turfName = settings?.turfName || "ABC Turf";
   let welcomeMsg = settings?.welcomeMessage || "Welcome to ABC Turf! ⚽🏏\n\nClick the button below to book a slot.";
 
@@ -263,14 +266,15 @@ async function handleTextMessage(from: string, text: string, profileName: string
 }
 
 // Handle "Book Now" click - list available slots
-async function handleBookNow(from: string, phoneId: string, accessToken: string) {
+async function handleBookNow(from: string, phoneId: string, accessToken: string, userId: string | null) {
   await connectDB();
 
-  const settings = await TurfSettings.findOne();
+  const settingsQuery = userId ? { userId } : { userId: { $exists: false } };
+  const settings = await TurfSettings.findOne(settingsQuery);
   const openTime = settings?.openTime || "06:00";
   const closeTime = settings?.closeTime || "22:00";
 
-  const { dateStr, rows } = await getAvailableSlots(openTime, closeTime);
+  const { dateStr, rows } = await getAvailableSlots(openTime, closeTime, userId);
 
   if (rows.length === 0) {
     await sendWhatsAppMessage(
@@ -305,7 +309,7 @@ async function handleBookNow(from: string, phoneId: string, accessToken: string)
 }
 
 // Handle slot list selection
-async function handleSlotSelection(from: string, profileName: string, listId: string, phoneId: string, accessToken: string) {
+async function handleSlotSelection(from: string, profileName: string, listId: string, phoneId: string, accessToken: string, userId: string | null) {
   const [, dateStr, timeSlot] = listId.split("|");
 
   if (!dateStr || !timeSlot) {
@@ -316,7 +320,11 @@ async function handleSlotSelection(from: string, profileName: string, listId: st
   await connectDB();
 
   // Double booking protection
-  const existing = await Booking.findOne({ date: dateStr, timeSlot });
+  const query = userId 
+    ? { userId, date: dateStr, timeSlot } 
+    : { userId: { $exists: false }, date: dateStr, timeSlot };
+
+  const existing = await Booking.findOne(query);
   if (existing) {
     await sendWhatsAppMessage(
       from,
@@ -329,6 +337,7 @@ async function handleSlotSelection(from: string, profileName: string, listId: st
 
   // Create booking
   await Booking.create({
+    userId: userId || undefined,
     customerPhone: from,
     customerName: profileName,
     date: dateStr,
@@ -350,7 +359,7 @@ async function handleSlotSelection(from: string, profileName: string, listId: st
 }
 
 // Dynamic slot generator helper
-async function getAvailableSlots(openTime: string, closeTime: string) {
+async function getAvailableSlots(openTime: string, closeTime: string, userId: string | null) {
   const [openHour] = openTime.split(":").map(Number);
   const [closeHour] = closeTime.split(":").map(Number);
 
@@ -371,13 +380,13 @@ async function getAvailableSlots(openTime: string, closeTime: string) {
   }
 
   let dateStr = formatDate(targetDate);
-  let rows = await generateRowsForDate(dateStr, startHour, closeHour);
+  let rows = await generateRowsForDate(dateStr, startHour, closeHour, userId);
 
   // If today is fully booked, default to tomorrow's slots
   if (isToday && rows.length === 0) {
     targetDate.setDate(targetDate.getDate() + 1);
     dateStr = formatDate(targetDate);
-    rows = await generateRowsForDate(dateStr, openHour, closeHour);
+    rows = await generateRowsForDate(dateStr, openHour, closeHour, userId);
   }
 
   return { dateStr, rows };
@@ -390,8 +399,9 @@ function formatDate(d: Date): string {
   return `${year}-${month}-${dateVal}`;
 }
 
-async function generateRowsForDate(dateStr: string, startHour: number, closeHour: number) {
-  const bookings = await Booking.find({ date: dateStr });
+async function generateRowsForDate(dateStr: string, startHour: number, closeHour: number, userId: string | null) {
+  const query = userId ? { userId, date: dateStr } : { userId: { $exists: false }, date: dateStr };
+  const bookings = await Booking.find(query);
   const bookedSlots = new Set(bookings.map((b: any) => b.timeSlot));
   const rows = [];
 

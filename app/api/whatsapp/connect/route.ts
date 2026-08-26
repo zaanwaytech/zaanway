@@ -121,16 +121,16 @@ export async function POST(req: NextRequest) {
     // Save WhatsApp connection details in MongoDB
     await connectDB();
     
-    let user = await User.findOne();
+    let user = await User.findOne({ phoneNumberId });
     if (!user) {
       user = new User({
-        name: "Admin",
-        email: "admin@zaanway.com",
+        name: `Client (${phoneNumberId})`,
+        email: `client-${phoneNumberId}@zaanway.com`,
+        phoneNumberId,
       });
     }
 
     user.whatsappConnected = true;
-    user.phoneNumberId = phoneNumberId;
     user.wabaId = wabaId;
     user.businessId = businessId;
     user.accessToken = clientAccessToken;

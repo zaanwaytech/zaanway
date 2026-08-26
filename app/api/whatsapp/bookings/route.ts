@@ -2,10 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import Booking from "@/models/Booking";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    const { searchParams } = new URL(req.url);
+    const userId = searchParams.get("userId");
+
     await connectDB();
-    const bookings = await Booking.find().sort({ date: -1, timeSlot: 1 });
+    const query = userId ? { userId } : { userId: { $exists: false } };
+    const bookings = await Booking.find(query).sort({ date: -1, timeSlot: 1 });
     return NextResponse.json({ success: true, bookings });
   } catch (error: any) {
     console.error("GET Bookings Error:", error);

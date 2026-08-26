@@ -11,7 +11,11 @@ declare global {
 
 const CONFIG_ID = "1995892224390931";
 
-export default function ConnectWhatsAppButton() {
+export default function ConnectWhatsAppButton({
+  onConnectSuccess,
+}: {
+  onConnectSuccess?: () => void;
+}) {
   const [loading, setLoading] = useState(false);
   const [connected, setConnected] = useState(false);
 
@@ -68,6 +72,9 @@ export default function ConnectWhatsAppButton() {
             setConnected(true);
             sessionStorage.removeItem("wa_code");
             alert("🎉 WhatsApp Connected Successfully!");
+            if (onConnectSuccess) {
+              onConnectSuccess();
+            }
           } else {
             alert(result.message || "Connection failed");
           }

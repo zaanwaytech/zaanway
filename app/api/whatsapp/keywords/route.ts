@@ -2,10 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import Keyword from "@/models/Keyword";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    const { searchParams } = new URL(req.url);
+    const userId = searchParams.get("userId");
+
     await connectDB();
-    const keywords = await Keyword.find().sort({ createdAt: -1 });
+    const query = userId ? { userId } : { userId: { $exists: false } };
+    const keywords = await Keyword.find(query).sort({ createdAt: -1 });
     return NextResponse.json({ success: true, keywords });
   } catch (error: any) {
     console.error("GET Keywords Error:", error);
@@ -18,6 +22,9 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
+    const { searchParams } = new URL(req.url);
+    const userId = searchParams.get("userId");
+
     const body = await req.json();
     const { keyword, reply } = body;
 
@@ -31,13 +38,18 @@ export async function POST(req: NextRequest) {
     const cleanKeyword = keyword.trim().toLowerCase();
 
     await connectDB();
-    let existing = await Keyword.findOne({ keyword: cleanKeyword });
+    const query = userId 
+      ? { userId, keyword: cleanKeyword } 
+      : { userId: { $exists: false }, keyword: cleanKeyword };
+
+    let existing = await Keyword.findOne(query);
     if (existing) {
       existing.reply = reply;
       await existing.save();
       return NextResponse.json({ success: true, keyword: existing });
     } else {
       const newKeyword = await Keyword.create({
+        userId: userId || undefined,
         keyword: cleanKeyword,
         reply,
       });

@@ -2,6 +2,7 @@ import mongoose, { Schema } from "mongoose";
 
 const BookingSchema = new Schema(
   {
+    userId: { type: String },
     customerPhone: { type: String, required: true },
     customerName: { type: String },
     date: { type: String, required: true }, // YYYY-MM-DD

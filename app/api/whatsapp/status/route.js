@@ -6,10 +6,25 @@ const DEFAULT_PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
 const ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
 const API_VERSION = process.env.META_API_VERSION || "v23.0";
 
-export async function GET() {
+export async function GET(req) {
   try {
+    const { searchParams } = new URL(req.url);
+    const userId = searchParams.get("userId");
+
     await connectDB();
-    const user = await User.findOne();
+    
+    let user = null;
+    if (userId) {
+      try {
+        user = await User.findById(userId);
+      } catch (err) {
+        console.error("Invalid userId format in status check:", userId);
+      }
+    }
+    if (!user) {
+      user = await User.findOne();
+    }
+
     const phoneNumberId = user?.phoneNumberId || DEFAULT_PHONE_NUMBER_ID;
     const tokenToUse = user?.accessToken || ACCESS_TOKEN;
 

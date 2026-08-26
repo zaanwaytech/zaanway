@@ -45,6 +45,10 @@ const HOURS = Array.from({ length: 24 }, (_, i) => {
 });
 
 export default function WhatsAppPage() {
+  const [users, setUsers] = useState<{ _id: string; name: string; phoneNumberId?: string }[]>([]);
+  const [selectedUserId, setSelectedUserId] = useState<string>("");
+  const [fetchingUsers, setFetchingUsers] = useState(true);
+
   const [settings, setSettings] = useState<Settings>({
     turfName: "ABC Turf",
     openTime: "06:00",
@@ -68,26 +72,60 @@ export default function WhatsAppPage() {
   const [savingSettings, setSavingSettings] = useState(false);
   const [savingKeyword, setSavingKeyword] = useState(false);
 
-  // Fetch all dashboard data
+  // Fetch users/clients list
+  const fetchUsers = async () => {
+    try {
+      setFetchingUsers(true);
+      const res = await fetch("/api/whatsapp/users");
+      const data = await res.json();
+      if (data.success && data.users) {
+        setUsers(data.users);
+        if (data.users.length > 0) {
+          setSelectedUserId((prev) => {
+            const exists = data.users.some((u: any) => u._id === prev);
+            return exists ? prev : data.users[0]._id;
+          });
+        } else {
+          setSelectedUserId("");
+        }
+      }
+    } catch (err) {
+      console.error("Error fetching users:", err);
+    } finally {
+      setFetchingUsers(false);
+    }
+  };
+
+  // Fetch all dashboard data for selected client
   const fetchData = async () => {
+    if (!selectedUserId) {
+      setKeywords([]);
+      setBookings([]);
+      setStatus(null);
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
+      const userParam = `?userId=${selectedUserId}`;
+
       // Fetch Settings
-      const settingsRes = await fetch("/api/whatsapp/settings");
+      const settingsRes = await fetch(`/api/whatsapp/settings${userParam}`);
       const settingsData = await settingsRes.json();
       if (settingsData.success && settingsData.settings) {
         setSettings(settingsData.settings);
       }
 
       // Fetch Keywords
-      const keywordsRes = await fetch("/api/whatsapp/keywords");
+      const keywordsRes = await fetch(`/api/whatsapp/keywords${userParam}`);
       const keywordsData = await keywordsRes.json();
       if (keywordsData.success) {
         setKeywords(keywordsData.keywords);
       }
 
       // Fetch Bookings
-      const bookingsRes = await fetch("/api/whatsapp/bookings");
+      const bookingsRes = await fetch(`/api/whatsapp/bookings${userParam}`);
       const bookingsData = await bookingsRes.json();
       if (bookingsData.success) {
         setBookings(bookingsData.bookings);
@@ -95,7 +133,7 @@ export default function WhatsAppPage() {
 
       // Fetch Connection Status
       try {
-        const statusRes = await fetch("/api/whatsapp/status");
+        const statusRes = await fetch(`/api/whatsapp/status${userParam}`);
         const statusData = await statusRes.json();
         setStatus(statusData);
       } catch (err) {
@@ -109,15 +147,22 @@ export default function WhatsAppPage() {
   };
 
   useEffect(() => {
-    fetchData();
+    fetchUsers();
   }, []);
+
+  useEffect(() => {
+    if (selectedUserId) {
+      fetchData();
+    }
+  }, [selectedUserId]);
 
   // Save Turf Settings
   const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!selectedUserId) return;
     try {
       setSavingSettings(true);
-      const res = await fetch("/api/whatsapp/settings", {
+      const res = await fetch(`/api/whatsapp/settings?userId=${selectedUserId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(settings),
@@ -139,11 +184,11 @@ export default function WhatsAppPage() {
   // Add Keyword Automation Rule
   const handleAddKeyword = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newKeyword.trim() || !newReply.trim()) return;
+    if (!newKeyword.trim() || !newReply.trim() || !selectedUserId) return;
 
     try {
       setSavingKeyword(true);
-      const res = await fetch("/api/whatsapp/keywords", {
+      const res = await fetch(`/api/whatsapp/keywords?userId=${selectedUserId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ keyword: newKeyword, reply: newReply }),
@@ -153,7 +198,7 @@ export default function WhatsAppPage() {
         setNewKeyword("");
         setNewReply("");
         // Reload keywords
-        const keywordsRes = await fetch("/api/whatsapp/keywords");
+        const keywordsRes = await fetch(`/api/whatsapp/keywords?userId=${selectedUserId}`);
         const keywordsData = await keywordsRes.json();
         if (keywordsData.success) {
           setKeywords(keywordsData.keywords);
@@ -170,9 +215,10 @@ export default function WhatsAppPage() {
 
   // Delete Keyword Rule
   const handleDeleteKeyword = async (id: string) => {
+    if (!selectedUserId) return;
     if (!confirm("Are you sure you want to delete this auto-reply rule?")) return;
     try {
-      const res = await fetch(`/api/whatsapp/keywords?id=${id}`, {
+      const res = await fetch(`/api/whatsapp/keywords?id=${id}&userId=${selectedUserId}`, {
         method: "DELETE",
       });
       const data = await res.json();
@@ -188,9 +234,10 @@ export default function WhatsAppPage() {
 
   // Cancel Booking
   const handleCancelBooking = async (id: string) => {
+    if (!selectedUserId) return;
     if (!confirm("Are you sure you want to cancel this booking?")) return;
     try {
-      const res = await fetch(`/api/whatsapp/bookings?id=${id}`, {
+      const res = await fetch(`/api/whatsapp/bookings?id=${id}&userId=${selectedUserId}`, {
         method: "DELETE",
       });
       const data = await res.json();
@@ -224,7 +271,29 @@ export default function WhatsAppPage() {
           </p>
         </div>
 
-        <div className="grid md:grid-cols-2 gap-8 mt-14">
+        {/* Client Account Switcher */}
+        <div className="max-w-xl mx-auto mt-10 bg-white rounded-2xl border border-gray-100 shadow-md p-5 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3 w-full">
+            <span className="font-bold text-gray-700 text-sm whitespace-nowrap">Active Client:</span>
+            <select
+              value={selectedUserId}
+              onChange={(e) => setSelectedUserId(e.target.value)}
+              className="border w-full rounded-xl p-3 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-green-500 font-semibold text-gray-800 text-sm"
+            >
+              {users.length === 0 ? (
+                <option value="">No accounts connected</option>
+              ) : (
+                users.map((u) => (
+                  <option key={u._id} value={u._id}>
+                    {u.name} {u.phoneNumberId ? `(${u.phoneNumberId})` : ""}
+                  </option>
+                ))
+              )}
+            </select>
+          </div>
+        </div>
+
+        <div className="grid md:grid-cols-2 gap-8 mt-10">
           {/* Connect */}
           <div className="rounded-3xl bg-white border border-gray-100 shadow-xl p-8 hover:shadow-2xl transition duration-300">
             <div className="flex items-center gap-3">
@@ -235,7 +304,7 @@ export default function WhatsAppPage() {
               Link your WhatsApp Business phone number using Meta's official API to start receiving turf queries and bookings automatically.
             </p>
             <div className="mt-6">
-              <ConnectWhatsAppButton />
+              <ConnectWhatsAppButton onConnectSuccess={fetchUsers} />
             </div>
             {status && (
               <div className="mt-6 p-4 rounded-xl border border-gray-100 bg-gray-50 space-y-2">

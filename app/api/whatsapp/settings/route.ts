@@ -2,12 +2,22 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import TurfSettings from "@/models/TurfSettings";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    const { searchParams } = new URL(req.url);
+    const userId = searchParams.get("userId");
+
     await connectDB();
-    let settings = await TurfSettings.findOne();
+    let settings = null;
+    if (userId) {
+      settings = await TurfSettings.findOne({ userId });
+    } else {
+      settings = await TurfSettings.findOne({ userId: { $exists: false } });
+    }
+
     if (!settings) {
       settings = await TurfSettings.create({
+        userId: userId || undefined,
         turfName: "ABC Turf",
         openTime: "06:00",
         closeTime: "22:00",
@@ -26,11 +36,20 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
+    const { searchParams } = new URL(req.url);
+    const userId = searchParams.get("userId");
+
     const body = await req.json();
     const { turfName, openTime, closeTime, welcomeMessage } = body;
 
     await connectDB();
-    let settings = await TurfSettings.findOne();
+    let settings = null;
+    if (userId) {
+      settings = await TurfSettings.findOne({ userId });
+    } else {
+      settings = await TurfSettings.findOne({ userId: { $exists: false } });
+    }
+
     if (settings) {
       settings.turfName = turfName ?? settings.turfName;
       settings.openTime = openTime ?? settings.openTime;
@@ -39,6 +58,7 @@ export async function POST(req: NextRequest) {
       await settings.save();
     } else {
       settings = await TurfSettings.create({
+        userId: userId || undefined,
         turfName: turfName || "ABC Turf",
         openTime: openTime || "06:00",
         closeTime: closeTime || "22:00",
