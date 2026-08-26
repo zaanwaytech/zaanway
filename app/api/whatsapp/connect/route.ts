@@ -59,6 +59,65 @@ export async function POST(req: NextRequest) {
       clientAccessToken = process.env.WHATSAPP_ACCESS_TOKEN || "";
     }
 
+    if (!clientAccessToken) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Failed to exchange code or find a fallback WhatsApp Access Token",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    // 1. Register the phone number with Meta Cloud API
+    console.log(`Registering phone number ${phoneNumberId} with Meta Cloud API...`);
+    try {
+      const registerUrl = `https://graph.facebook.com/v23.0/${phoneNumberId}/register`;
+      const registerRes = await fetch(registerUrl, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${clientAccessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          messaging_product: "whatsapp",
+          pin: "123456", // default 6-digit pin
+        }),
+      });
+
+      const registerData = await registerRes.json();
+      if (!registerRes.ok) {
+        console.error("Meta Phone Registration Error details:", registerData);
+      } else {
+        console.log("Meta Phone Registration Successful:", registerData);
+      }
+    } catch (regErr) {
+      console.error("Error calling Meta Phone Registration API:", regErr);
+    }
+
+    // 2. Subscribe the App to the WABA
+    console.log(`Subscribing App to WABA ${wabaId}...`);
+    try {
+      const subscribeUrl = `https://graph.facebook.com/v23.0/${wabaId}/subscribed_apps`;
+      const subscribeRes = await fetch(subscribeUrl, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${clientAccessToken}`,
+        },
+      });
+
+      const subscribeData = await subscribeRes.json();
+      if (!subscribeRes.ok) {
+        console.error("Meta Subscribed Apps Error details:", subscribeData);
+      } else {
+        console.log("Meta WABA Subscription Successful:", subscribeData);
+      }
+    } catch (subErr) {
+      console.error("Error calling Meta Subscribed Apps API:", subErr);
+    }
+
     // Save WhatsApp connection details in MongoDB
     await connectDB();
     

@@ -8,21 +8,21 @@ const API_VERSION = process.env.META_API_VERSION || "v23.0";
 
 export async function GET() {
   try {
-    if (!ACCESS_TOKEN) {
-      return NextResponse.json(
-        {
-          success: false,
-          connected: false,
-          message: "Missing WHATSAPP_ACCESS_TOKEN environment variable.",
-        },
-        { status: 500 }
-      );
-    }
-
     await connectDB();
     const user = await User.findOne();
     const phoneNumberId = user?.phoneNumberId || DEFAULT_PHONE_NUMBER_ID;
     const tokenToUse = user?.accessToken || ACCESS_TOKEN;
+
+    if (!tokenToUse) {
+      return NextResponse.json(
+        {
+          success: false,
+          connected: false,
+          message: "Missing access token. Please connect WhatsApp first.",
+        },
+        { status: 400 }
+      );
+    }
 
     if (!phoneNumberId) {
       return NextResponse.json(
