@@ -16,6 +16,8 @@ const UserSchema = new Schema(
     wabaId: String,
 
     businessId: String,
+
+    accessToken: String,
   },
   {
     timestamps: true,

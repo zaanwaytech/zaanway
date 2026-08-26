@@ -22,6 +22,7 @@ export async function GET() {
     await connectDB();
     const user = await User.findOne();
     const phoneNumberId = user?.phoneNumberId || DEFAULT_PHONE_NUMBER_ID;
+    const tokenToUse = user?.accessToken || ACCESS_TOKEN;
 
     if (!phoneNumberId) {
       return NextResponse.json(
@@ -38,7 +39,7 @@ export async function GET() {
       `https://graph.facebook.com/${API_VERSION}/${phoneNumberId}`,
       {
         headers: {
-          Authorization: `Bearer ${ACCESS_TOKEN}`,
+          Authorization: `Bearer ${tokenToUse}`,
         },
         cache: "no-store",
       }
