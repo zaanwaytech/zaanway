@@ -69,6 +69,11 @@ export async function GET() {
       });
     }
 
+    if (data.display_phone_number) {
+      account.displayPhoneNumber = data.display_phone_number;
+      await account.save();
+    }
+
     return NextResponse.json({
       success: true,
       connected: true,
