@@ -151,6 +151,7 @@ export async function POST(req: NextRequest) {
         id: account._id,
         displayPhoneNumber: account.displayPhoneNumber,
         wabaId: account.wabaId,
+        phoneNumberId: account.phoneNumberId,
       },
     });
   } catch (error: unknown) {

@@ -12,6 +12,8 @@ import {
   FaArrowRight,
   FaArrowLeft,
 } from "react-icons/fa";
+import ConnectWhatsAppButton from "@/components/whatsapp/ConnectWhatsAppButton";
+import FacebookSDK from "@/components/FacebookSDK";
 
 export default function OnboardingPage() {
   const router = useRouter();
@@ -27,11 +29,11 @@ export default function OnboardingPage() {
   const [website, setWebsite] = useState("");
   const [hours, setHours] = useState("09:00 - 18:00");
   
-  // WhatsApp Mock Connection State
+  // WhatsApp Connection State
   const [whatsappConnected, setWhatsappConnected] = useState(false);
-  const whatsappNumber = "+1 555 019 2831";
-  const wabaId = "182390812938123";
-  const phoneNumberId = "1029381029381";
+  const [whatsappNumber, setWhatsappNumber] = useState("");
+  const [wabaId, setWabaId] = useState("");
+  const [phoneNumberId, setPhoneNumberId] = useState("");
 
   // Welcome Automation State
   const [welcomeText, setWelcomeText] = useState("Hello 👋 Welcome to our store!");
@@ -70,14 +72,7 @@ export default function OnboardingPage() {
     }
   };
 
-  const handleConnectWhatsApp = () => {
-    setLoading(true);
-    // Simulate Meta Embedded Signup
-    setTimeout(() => {
-      setWhatsappConnected(true);
-      setLoading(false);
-    }, 1500);
-  };
+
 
   const handleFinish = async () => {
     setLoading(true);
@@ -148,6 +143,7 @@ export default function OnboardingPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col justify-between">
+      <FacebookSDK />
       {/* Top Header */}
       <header className="bg-white border-b border-slate-100 py-4 px-6 flex justify-between items-center">
         <div className="flex items-center gap-2">
@@ -250,24 +246,23 @@ export default function OnboardingPage() {
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    <p className="text-slate-600 text-sm">
+                    <p className="text-slate-600 text-sm mb-4">
                       Zaanway uses the official Meta Embedded Signup to securely authorize your WhatsApp number.
                     </p>
-                    <button
-                      onClick={handleConnectWhatsApp}
-                      disabled={loading}
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-3 px-6 rounded-xl shadow-md transition flex items-center gap-2 justify-center mx-auto"
-                    >
-                      {loading ? (
-                        <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
-                      ) : (
-                        <FaWhatsapp className="w-5 h-5" />
-                      )}
-                      {loading ? "Launching Meta popup..." : "Connect WhatsApp Account"}
-                    </button>
-                    <p className="text-xs text-slate-400">
-                      (Development mode active: this will simulate a successful Meta authorization)
-                    </p>
+                    <div className="flex justify-center">
+                      <ConnectWhatsAppButton
+                        onConnectSuccess={(account: {
+                          wabaId: string;
+                          phoneNumberId: string;
+                          displayPhoneNumber: string;
+                        }) => {
+                          setWabaId(account.wabaId);
+                          setPhoneNumberId(account.phoneNumberId);
+                          setWhatsappNumber(account.displayPhoneNumber);
+                          setWhatsappConnected(true);
+                        }}
+                      />
+                    </div>
                   </div>
                 )}
               </div>

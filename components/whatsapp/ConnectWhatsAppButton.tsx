@@ -25,7 +25,11 @@ const CONFIG_ID = process.env.NEXT_PUBLIC_META_CONFIG_ID || "1995892224390931";
 export default function ConnectWhatsAppButton({
   onConnectSuccess,
 }: {
-  onConnectSuccess?: () => void;
+  onConnectSuccess?: (account: {
+    wabaId: string;
+    phoneNumberId: string;
+    displayPhoneNumber: string;
+  }) => void;
 }) {
   const [loading, setLoading] = useState(false);
   const [connected, setConnected] = useState(false);
@@ -84,7 +88,7 @@ export default function ConnectWhatsAppButton({
             sessionStorage.removeItem("wa_code");
             alert("🎉 WhatsApp Connected Successfully!");
             if (onConnectSuccess) {
-              onConnectSuccess();
+              onConnectSuccess(result.account);
             }
           } else {
             alert(result.message || "Connection failed");
