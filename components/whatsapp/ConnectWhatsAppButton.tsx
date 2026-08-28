@@ -20,7 +20,7 @@ declare global {
   }
 }
 
-const CONFIG_ID = "1995892224390931";
+const CONFIG_ID = process.env.NEXT_PUBLIC_META_CONFIG_ID || "1995892224390931";
 
 export default function ConnectWhatsAppButton({
   onConnectSuccess,
