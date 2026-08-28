@@ -5,7 +5,18 @@ import { FaWhatsapp } from "react-icons/fa";
 
 declare global {
   interface Window {
-    FB: any;
+    FB: {
+      init: (options: {
+        appId: string;
+        cookie: boolean;
+        xfbml: boolean;
+        version: string;
+      }) => void;
+      login: (
+        callback: (response: { authResponse?: { code: string } }) => void,
+        options: Record<string, unknown>
+      ) => void;
+    };
   }
 }
 
@@ -89,7 +100,7 @@ export default function ConnectWhatsAppButton({
     return () => {
       window.removeEventListener("message", handleMessage);
     };
-  }, []);
+  }, [onConnectSuccess]);
 
   const connectWhatsApp = () => {
     if (!window.FB) {
@@ -100,7 +111,7 @@ export default function ConnectWhatsAppButton({
     setLoading(true);
 
     window.FB.login(
-      (response: any) => {
+      (response: { authResponse?: { code: string } }) => {
         setLoading(false);
 
         console.log("Facebook Response:", response);

@@ -2,27 +2,25 @@ import mongoose, { Schema } from "mongoose";
 
 const UserSchema = new Schema(
   {
-    name: String,
-
-    email: String,
-
-    whatsappConnected: {
-      type: Boolean,
-      default: false,
+    name: {
+      type: String,
+      required: true,
     },
-
-    phoneNumberId: String,
-
-    wabaId: String,
-
-    businessId: String,
-
-    accessToken: String,
+    email: {
+      type: String,
+      required: true,
+      unique: true,
+      lowercase: true,
+      trim: true,
+    },
+    passwordHash: {
+      type: String,
+      required: true,
+    },
   },
   {
     timestamps: true,
   }
 );
 
-export default mongoose.models.User ||
-  mongoose.model("User", UserSchema);
+export default mongoose.models.User || mongoose.model("User", UserSchema);

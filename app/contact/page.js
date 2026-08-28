@@ -60,7 +60,7 @@ ${form.message}
           <h1 className="text-5xl font-bold">Contact Us</h1>
 
           <p className="mt-5 text-blue-100 text-lg">
-            We'd love to hear from you. Reach out using the information
+            We&apos;d love to hear from you. Reach out using the information
             below.
           </p>
         </div>

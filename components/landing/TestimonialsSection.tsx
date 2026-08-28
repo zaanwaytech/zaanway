@@ -47,7 +47,7 @@ const TestimonialsSection = () => {
                   {[1, 2, 3, 4, 5].map(i => <FaStar key={i} className="w-4 h-4" />)}
                 </div>
                 <p className="text-gray-700 text-lg leading-relaxed mb-8">
-                  "{testimonial.content}"
+                  &ldquo;{testimonial.content}&rdquo;
                 </p>
                 <div className="flex items-center gap-4 mt-auto">
                   <div className="w-12 h-12 rounded-full bg-gray-200 overflow-hidden border-2 border-white shadow-sm">
