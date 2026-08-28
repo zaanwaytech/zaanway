@@ -11,7 +11,7 @@ const FeaturesSection = () => {
       description: "Automate replies, broadcasts, lead capture, and CRM sync.",
       icon: <FaWhatsapp className="w-6 h-6 text-emerald-500" />,
       color: "bg-emerald-50",
-      link:"/whatsapp"
+      link:"/dashboard/whatsapp"
     },
     {
       title: "AI Agents",
