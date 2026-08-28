@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { FaWhatsapp, FaCheckCircle, FaExclamationCircle } from "react-icons/fa";
+import ConnectWhatsAppButton from "@/components/whatsapp/ConnectWhatsAppButton";
+import FacebookSDK from "@/components/FacebookSDK";
 
 export default function WhatsAppConnectionPage() {
   const [loading, setLoading] = useState(true);
@@ -85,6 +87,7 @@ export default function WhatsAppConnectionPage() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-8">
+      <FacebookSDK />
       {/* Header */}
       <div>
         <h1 className="text-3xl font-extrabold text-slate-800 tracking-tight">WhatsApp Settings</h1>

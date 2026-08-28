@@ -107,7 +107,6 @@ export default function OnboardingPage() {
             wabaId,
             phoneNumberId,
             displayPhoneNumber: whatsappNumber,
-            mock: true,
           }),
         });
       }
