@@ -13,8 +13,9 @@ export default function WhatsAppConnectionPage() {
     verifiedName?: string;
     wabaId?: string;
     phoneNumberId?: string;
-    error?: any;
+    error?: Record<string, unknown>;
   } | null>(null);
+  const [disconnecting, setDisconnecting] = useState(false);
 
   const fetchStatus = useCallback(async (showLoading = false) => {
     try {
@@ -32,6 +33,26 @@ export default function WhatsAppConnectionPage() {
       setLoading(false);
     }
   }, []);
+
+  const handleDisconnect = async () => {
+    if (!confirm("Are you sure you want to disconnect and delete this WhatsApp number?")) return;
+    try {
+      setDisconnecting(true);
+      const res = await fetch("/api/whatsapp/disconnect", { method: "DELETE" });
+      const data = await res.json();
+      if (data.success) {
+        setStatus(null);
+        fetchStatus(true);
+      } else {
+        alert(data.message || "Failed to disconnect");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("An error occurred while disconnecting.");
+    } finally {
+      setDisconnecting(false);
+    }
+  };
 
   useEffect(() => {
     fetchStatus(false);
@@ -87,6 +108,16 @@ export default function WhatsAppConnectionPage() {
               <ConnectWhatsAppButton
                 onConnectSuccess={() => fetchStatus(true)}
               />
+            )}
+
+            {status?.connected && (
+              <button
+                onClick={handleDisconnect}
+                disabled={disconnecting}
+                className="px-4 py-2 bg-red-50 text-red-600 hover:bg-red-100 border border-red-100 font-semibold text-sm rounded-xl transition duration-200 disabled:opacity-50"
+              >
+                {disconnecting ? "Disconnecting..." : "Disconnect Number"}
+              </button>
             )}
           </div>
 
