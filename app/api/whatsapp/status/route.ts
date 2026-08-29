@@ -49,7 +49,7 @@ export async function GET() {
     }
 
     // Call Meta API
-    const apiVersion = process.env.META_GRAPH_API_VERSION || "v20.0";
+    const apiVersion = process.env.META_API_VERSION || "v20.0";
     const res = await fetch(
       `https://graph.facebook.com/${apiVersion}/${account.phoneNumberId}`,
       {

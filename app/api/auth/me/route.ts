@@ -13,7 +13,14 @@ export async function GET() {
     if (!session || !session.userId) {
       return NextResponse.json(
         { success: false, message: "Unauthorized" },
-        { status: 401 }
+        { 
+          status: 401,
+          headers: {
+            "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
+          }
+        }
       );
     }
 
@@ -47,14 +54,8 @@ export async function GET() {
     let activeWorkspaceId = session.workspaceId;
     if (!activeWorkspaceId && workspacesWithRoles.length > 0) {
       activeWorkspaceId = workspacesWithRoles[0].id.toString();
-
-      // Update session cookie with active workspace
-      const newToken = signToken({
-        userId: session.userId,
-        email: session.email,
-        workspaceId: activeWorkspaceId,
-      });
-      await setSessionCookie(newToken);
+      // We cannot set a cookie in a GET Route Handler in Next.js.
+      // The frontend must call POST /api/auth/me with the active workspace to persist it.
     }
 
     const activeWorkspace = workspacesWithRoles.find(
@@ -70,6 +71,12 @@ export async function GET() {
       },
       activeWorkspace,
       workspaces: workspacesWithRoles,
+    }, {
+      headers: {
+        "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+        "Pragma": "no-cache",
+        "Expires": "0",
+      }
     });
   } catch (error: unknown) {
     console.error("Auth me check error:", error);

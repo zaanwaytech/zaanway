@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
 
     const appId = process.env.META_APP_ID;
     const appSecret = process.env.META_APP_SECRET;
-    const apiVersion = process.env.META_GRAPH_API_VERSION || "v20.0";
+    const apiVersion = process.env.META_API_VERSION || "v20.0";
 
     if (!appId || !appSecret) {
       return NextResponse.json(

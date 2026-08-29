@@ -23,7 +23,8 @@ export function signToken(payload: SessionPayload): string {
 export function verifyToken(token: string): SessionPayload | null {
   try {
     return jwt.verify(token, JWT_SECRET) as SessionPayload;
-  } catch {
+  } catch (err) {
+    console.log("[verifyToken] Error verifying JWT:", err);
     return null;
   }
 }
@@ -56,17 +57,24 @@ export async function clearSessionCookie() {
   });
 }
 
-/**
- * Retrieves the current verified session from cookies.
- */
 export async function getSession(): Promise<SessionPayload | null> {
   try {
     const cookieStore = await cookies();
     const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
-    if (!token) return null;
+    if (!token) {
+      console.log("[getSession] No session cookie found in request.");
+      return null;
+    }
 
-    return verifyToken(token);
-  } catch {
+    const payload = verifyToken(token);
+    if (!payload) {
+      console.log("[getSession] Token verification failed.");
+      return null;
+    }
+
+    return payload;
+  } catch (error) {
+    console.error("[getSession] Unexpected error getting session:", error);
     return null;
   }
 }
