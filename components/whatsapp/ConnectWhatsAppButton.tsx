@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { FaWhatsapp } from "react-icons/fa";
 
 declare global {
@@ -34,6 +34,55 @@ export default function ConnectWhatsAppButton({
   const [loading, setLoading] = useState(false);
   const [connected, setConnected] = useState(false);
 
+  const waCodeRef = useRef<string | null>(null);
+  const waDataRef = useRef<any | null>(null);
+
+  const processConnection = async () => {
+    const code = waCodeRef.current || sessionStorage.getItem("wa_code");
+    const data = waDataRef.current;
+
+    if (!code || !data) {
+      return; // Wait until both are available
+    }
+
+    setLoading(true);
+
+    try {
+      const res = await fetch("/api/whatsapp/connect", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          code,
+          businessId: data.business_id,
+          wabaId: data.waba_id,
+          phoneNumberId: data.phone_number_id,
+        }),
+      });
+
+      const result = await res.json();
+      console.log(result);
+      setLoading(false);
+
+      if (result.success) {
+        setConnected(true);
+        sessionStorage.removeItem("wa_code");
+        waCodeRef.current = null;
+        waDataRef.current = null;
+        alert("🎉 WhatsApp Connected Successfully!");
+        if (onConnectSuccess) {
+          onConnectSuccess(result.account);
+        }
+      } else {
+        alert(result.message || "Connection failed");
+      }
+    } catch (err) {
+      console.error(err);
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     const handleMessage = async (event: MessageEvent) => {
       if (
@@ -44,55 +93,20 @@ export default function ConnectWhatsAppButton({
       }
 
       try {
-        const data =
-          typeof event.data === "string"
-            ? JSON.parse(event.data)
-            : event.data;
-
-        console.log("Meta Embedded Signup:", data);
-
-        if (
-          data?.type === "WA_EMBEDDED_SIGNUP" &&
-          data?.event === "FINISH"
-        ) {
-          const code = sessionStorage.getItem("wa_code");
-
-          if (!code) {
-            alert("Authorization code not found.");
+        let data = event.data;
+        if (typeof event.data === "string") {
+          // ignore non-JSON messages like "cb=f00aa34..." safely
+          try {
+            data = JSON.parse(event.data);
+          } catch (e) {
             return;
           }
+        }
 
-          setLoading(true);
-
-          const res = await fetch("/api/whatsapp/connect", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              code,
-              businessId: data.data.business_id,
-              wabaId: data.data.waba_id,
-              phoneNumberId: data.data.phone_number_id,
-            }),
-          });
-
-          const result = await res.json();
-
-          console.log(result);
-
-          setLoading(false);
-
-          if (result.success) {
-            setConnected(true);
-            sessionStorage.removeItem("wa_code");
-            alert("🎉 WhatsApp Connected Successfully!");
-            if (onConnectSuccess) {
-              onConnectSuccess(result.account);
-            }
-          } else {
-            alert(result.message || "Connection failed");
-          }
+        if (data?.type === "WA_EMBEDDED_SIGNUP" && data?.event === "FINISH") {
+          console.log("Meta Embedded Signup FINISH event received:", data);
+          waDataRef.current = data.data;
+          processConnection();
         }
       } catch (err) {
         console.error(err);
@@ -100,10 +114,7 @@ export default function ConnectWhatsAppButton({
     };
 
     window.addEventListener("message", handleMessage);
-
-    return () => {
-      window.removeEventListener("message", handleMessage);
-    };
+    return () => window.removeEventListener("message", handleMessage);
   }, [onConnectSuccess]);
 
   const connectWhatsApp = () => {
@@ -113,26 +124,25 @@ export default function ConnectWhatsAppButton({
     }
 
     setLoading(true);
+    waCodeRef.current = null;
+    waDataRef.current = null;
 
     window.FB.login(
       (response: { authResponse?: { code: string } }) => {
-        setLoading(false);
-
         console.log("Facebook Response:", response);
-
+        
         if (!response.authResponse?.code) {
+          setLoading(false);
           alert("User cancelled login");
           return;
         }
 
         const code = response.authResponse.code;
-
-        console.log("Authorization Code:", code);
-
-        // Save temporarily until signup finishes
+        console.log("Authorization Code received.");
+        
+        waCodeRef.current = code;
         sessionStorage.setItem("wa_code", code);
-
-        console.log("Waiting for Embedded Signup FINISH event...");
+        processConnection();
       },
       {
         config_id: CONFIG_ID,
