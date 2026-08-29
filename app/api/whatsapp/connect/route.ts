@@ -130,13 +130,32 @@ export async function POST(req: NextRequest) {
       console.error("Error subscribing app to WABA:", subErr);
     }
 
+    // Fetch actual phone number details
+    let realDisplayPhoneNumber = displayPhoneNumber || "Verified Number";
+    try {
+      const phoneUrl = `https://graph.facebook.com/${apiVersion}/${phoneNumberId}`;
+      const phoneRes = await fetch(phoneUrl, {
+        headers: {
+          Authorization: `Bearer ${clientAccessToken}`,
+        },
+      });
+      if (phoneRes.ok) {
+        const phoneData = await phoneRes.json();
+        if (phoneData.display_phone_number) {
+          realDisplayPhoneNumber = phoneData.display_phone_number;
+        }
+      }
+    } catch (err) {
+      console.error("Error fetching phone number:", err);
+    }
+
     // Save in Database under active workspace
     const account = await WhatsAppAccount.findOneAndUpdate(
       { workspaceId: targetWorkspaceId },
       {
         wabaId,
         phoneNumberId,
-        displayPhoneNumber: displayPhoneNumber || "Verified Number",
+        displayPhoneNumber: realDisplayPhoneNumber,
         accessTokenEncrypted: clientAccessToken, // In prod you can encrypt this token
         verified: true,
         status: "connected",

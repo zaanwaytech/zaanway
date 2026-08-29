@@ -77,9 +77,9 @@ export default function OnboardingPage() {
   const handleFinish = async () => {
     setLoading(true);
     try {
-      // 1. Create Workspace
+      // 1. Update Current Workspace
       const workspaceRes = await fetch("/api/workspaces", {
-        method: "POST",
+        method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: businessName,
@@ -92,26 +92,12 @@ export default function OnboardingPage() {
       });
       const workspaceData = await workspaceRes.json();
       if (!workspaceData.success) {
-        throw new Error(workspaceData.message || "Failed to create workspace");
+        throw new Error(workspaceData.message || "Failed to update workspace");
       }
 
       const activeWorkspace = workspaceData.workspace;
 
-      // 2. Connect WhatsApp Mock Account
-      if (whatsappConnected) {
-        await fetch("/api/whatsapp/connect", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            workspaceId: activeWorkspace._id,
-            wabaId,
-            phoneNumberId,
-            displayPhoneNumber: whatsappNumber,
-          }),
-        });
-      }
-
-      // 3. Save Custom Automation Flow
+      // 2. Save Custom Automation Flow
       await fetch("/api/whatsapp/settings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

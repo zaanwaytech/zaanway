@@ -124,3 +124,47 @@ export async function POST(request: Request) {
     );
   }
 }
+
+export async function PUT(request: Request) {
+  try {
+    await connectDB();
+    const session = await getSession();
+
+    if (!session || !session.userId || !session.workspaceId) {
+      return NextResponse.json(
+        { success: false, message: "Unauthorized or no active workspace" },
+        { status: 401 }
+      );
+    }
+
+    const { name, industry, businessDescription, address, website, hours } = await request.json();
+
+    const workspace = await Workspace.findOneAndUpdate(
+      { _id: session.workspaceId },
+      {
+        name: name || undefined,
+        "metadata.industry": industry,
+        "metadata.businessDescription": businessDescription,
+        "metadata.address": address,
+        "metadata.website": website,
+        "metadata.hours": hours,
+      },
+      { new: true }
+    );
+
+    if (!workspace) {
+      return NextResponse.json(
+        { success: false, message: "Workspace not found" },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({ success: true, workspace });
+  } catch (error: unknown) {
+    console.error("Update workspace error:", error);
+    return NextResponse.json(
+      { success: false, message: (error as Error).message || "An error occurred updating workspace" },
+      { status: 500 }
+    );
+  }
+}

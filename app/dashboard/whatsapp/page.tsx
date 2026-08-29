@@ -7,7 +7,6 @@ import FacebookSDK from "@/components/FacebookSDK";
 
 export default function WhatsAppConnectionPage() {
   const [loading, setLoading] = useState(true);
-  const [connecting, setConnecting] = useState(false);
   const [status, setStatus] = useState<{
     connected: boolean;
     displayPhoneNumber?: string;
@@ -19,7 +18,6 @@ export default function WhatsAppConnectionPage() {
   const fetchStatus = useCallback(async (showLoading = false) => {
     try {
       if (showLoading) setLoading(true);
-      // Fetch session to retrieve user details
       const meRes = await fetch("/api/auth/me");
       const meData = await meRes.json();
       if (meData.success && meData.activeWorkspace) {
@@ -35,47 +33,8 @@ export default function WhatsAppConnectionPage() {
   }, []);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchStatus(false);
   }, [fetchStatus]);
-
-  const handleConnect = async () => {
-    setConnecting(true);
-    try {
-      // Fetch user context
-      const meRes = await fetch("/api/auth/me");
-      const meData = await meRes.json();
-      if (!meData.success) {
-        throw new Error("Session expired. Please sign in again.");
-      }
-
-      const workspaceId = meData.activeWorkspace.id;
-
-      // POST to link mock account
-      const connectRes = await fetch("/api/whatsapp/connect", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          workspaceId,
-          wabaId: "1735805137673415",
-          phoneNumberId: "1299895066532873",
-          displayPhoneNumber: "+1 555 019 2831",
-          mock: true,
-        }),
-      });
-
-      const connectData = await connectRes.json();
-      if (!connectData.success) {
-        throw new Error(connectData.message || "Failed to link WhatsApp account");
-      }
-
-      await fetchStatus(true);
-    } catch (err: unknown) {
-      alert((err as Error).message || "Connection failed");
-    } finally {
-      setConnecting(false);
-    }
-  };
 
   if (loading) {
     return (
@@ -124,14 +83,9 @@ export default function WhatsAppConnectionPage() {
             </div>
 
             {!status?.connected && (
-              <button
-                onClick={handleConnect}
-                disabled={connecting}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm px-6 py-2.5 rounded-xl shadow-md transition disabled:bg-emerald-400 flex items-center gap-2"
-              >
-                {connecting && <div className="animate-spin rounded-full h-3.5 w-3.5 border-2 border-white border-t-transparent"></div>}
-                {connecting ? "Connecting..." : "Connect WhatsApp"}
-              </button>
+              <ConnectWhatsAppButton
+                onConnectSuccess={() => fetchStatus(true)}
+              />
             )}
           </div>
 
