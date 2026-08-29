@@ -46,6 +46,10 @@ export async function POST(req: NextRequest) {
     const rawBody = await req.text();
     const signatureHeader = req.headers.get("x-hub-signature-256");
 
+    console.log("[WEBHOOK INCOMING] Received webhook POST request.");
+    console.log("[WEBHOOK INCOMING] Signature Header:", signatureHeader);
+    console.log("[WEBHOOK INCOMING] Raw Body:", rawBody.substring(0, 500) + (rawBody.length > 500 ? "..." : ""));
+
     // 1. Signature Verification
     if (!MOCK_MODE) {
       const appSecret = process.env.META_APP_SECRET;
@@ -55,7 +59,7 @@ export async function POST(req: NextRequest) {
       }
 
       if (!signatureHeader) {
-        console.warn("[WEBHOOK] Missing x-hub-signature-256 header.");
+        console.warn("[WEBHOOK] Missing x-hub-signature-256 header. Make sure Meta is sending the signature.");
         return NextResponse.json({ error: "Missing signature header" }, { status: 401 });
       }
 
