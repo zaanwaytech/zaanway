@@ -1,7 +1,7 @@
 import crypto from "crypto";
 
 const MOCK_MODE = process.env.WHATSAPP_MOCK_MODE === "true";
-const API_VERSION = process.env.META_GRAPH_API_VERSION || "v20.0";
+const API_VERSION = process.env.META_API_VERSION || "v20.0";
 
 export interface SendMessageResult {
   success: boolean;

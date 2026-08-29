@@ -235,9 +235,12 @@ export async function POST(req: NextRequest) {
           if (action.type === "send_text") {
             const replyText = action.payload?.text;
             if (replyText) {
+              const systemToken = process.env.WHATSAPP_ACCESS_TOKEN;
+              const tokenToUse = systemToken || account.accessTokenEncrypted;
+
               const sendResult = await sendWhatsAppText(
                 account.phoneNumberId,
-                account.accessTokenEncrypted,
+                tokenToUse,
                 customerPhone,
                 replyText
               );
@@ -258,9 +261,12 @@ export async function POST(req: NextRequest) {
           } else if (action.type === "send_interactive_buttons") {
             const replyButtons = action.payload?.buttons;
             if (replyButtons && replyButtons.length > 0) {
+              const systemToken = process.env.WHATSAPP_ACCESS_TOKEN;
+              const tokenToUse = systemToken || account.accessTokenEncrypted;
+
               const sendResult = await sendWhatsAppButtons(
                 account.phoneNumberId,
-                account.accessTokenEncrypted,
+                tokenToUse,
                 customerPhone,
                 textPrompt,
                 replyButtons
