@@ -13,7 +13,7 @@ export default function WhatsAppConnectionPage() {
     verifiedName?: string;
     wabaId?: string;
     phoneNumberId?: string;
-    error?: Record<string, unknown>;
+    error?: { message?: string; [key: string]: unknown } | null;
   } | null>(null);
   const [disconnecting, setDisconnecting] = useState(false);
 
