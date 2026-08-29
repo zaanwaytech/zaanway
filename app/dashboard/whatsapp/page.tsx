@@ -13,6 +13,7 @@ export default function WhatsAppConnectionPage() {
     verifiedName?: string;
     wabaId?: string;
     phoneNumberId?: string;
+    error?: any;
   } | null>(null);
 
   const fetchStatus = useCallback(async (showLoading = false) => {
@@ -82,12 +83,25 @@ export default function WhatsAppConnectionPage() {
               </div>
             </div>
 
-            {!status?.connected && (
+            {!status?.connected && !status?.error && (
               <ConnectWhatsAppButton
                 onConnectSuccess={() => fetchStatus(true)}
               />
             )}
           </div>
+
+          {status?.error && (
+            <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-2xl p-4 mt-4">
+              <strong>Meta API Error:</strong> {status.error.message || JSON.stringify(status.error)}
+              <br/>
+              <span className="text-slate-600 mt-2 block">
+                This usually means your Meta WhatsApp account is restricted, unverified, or the access token lacks permissions. You may need to verify your business in Meta Business Suite or try reconnecting.
+              </span>
+              <div className="mt-4">
+                <ConnectWhatsAppButton onConnectSuccess={() => fetchStatus(true)} />
+              </div>
+            </div>
+          )}
 
           {/* Connection Profile Details */}
           {status?.connected && (

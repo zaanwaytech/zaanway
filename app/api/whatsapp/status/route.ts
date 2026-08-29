@@ -48,13 +48,15 @@ export async function GET() {
       });
     }
 
-    // Call Meta API
     const apiVersion = process.env.META_API_VERSION || "v20.0";
+    const systemToken = process.env.WHATSAPP_ACCESS_TOKEN;
+    const tokenToUse = systemToken || account.accessTokenEncrypted;
+
     const res = await fetch(
       `https://graph.facebook.com/${apiVersion}/${account.phoneNumberId}`,
       {
         headers: {
-          Authorization: `Bearer ${account.accessTokenEncrypted}`,
+          Authorization: `Bearer ${tokenToUse}`,
         },
         cache: "no-store",
       }
