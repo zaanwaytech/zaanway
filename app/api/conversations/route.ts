@@ -5,8 +5,9 @@ import Conversation from "@/models/Conversation";
 import Message from "@/models/Message";
 
 export async function GET(req: NextRequest) {
+  const bypassAuth = process.env.BYPASS_AUTH === "true" || process.env.NEXT_PUBLIC_BYPASS_AUTH === "true";
+
   try {
-    await connectDB();
     const session = await getSession();
 
     if (!session || !session.userId) {
@@ -16,6 +17,16 @@ export async function GET(req: NextRequest) {
     const workspaceId = session.workspaceId;
     if (!workspaceId) {
       return NextResponse.json({ success: false, message: "No active workspace" }, { status: 400 });
+    }
+
+    try {
+      await connectDB();
+    } catch (dbErr) {
+      console.warn("[CONVERSATIONS] DB connection offline:", dbErr);
+      return NextResponse.json({
+        success: true,
+        conversations: [],
+      });
     }
 
     const { searchParams } = new URL(req.url);
@@ -64,6 +75,12 @@ export async function GET(req: NextRequest) {
     });
   } catch (error: unknown) {
     console.error("[CONVERSATIONS_GET_ERROR]", error);
+    if (bypassAuth) {
+      return NextResponse.json({
+        success: true,
+        conversations: [],
+      });
+    }
     return NextResponse.json(
       { success: false, message: "Failed to fetch conversations" },
       { status: 500 }

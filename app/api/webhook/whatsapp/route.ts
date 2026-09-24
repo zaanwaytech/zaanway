@@ -17,31 +17,49 @@ const MOCK_MODE = process.env.WHATSAPP_MOCK_MODE === "true";
  */
 export async function GET(req: NextRequest) {
   try {
-    const { searchParams } = new URL(req.url);
-    const mode = searchParams.get("hub.mode");
-    const token = searchParams.get("hub.verify_token");
-    const challenge = searchParams.get("hub.challenge");
+    const mode = req.nextUrl.searchParams.get("hub.mode") || new URL(req.url).searchParams.get("hub.mode");
+    const token = req.nextUrl.searchParams.get("hub.verify_token") || new URL(req.url).searchParams.get("hub.verify_token");
+    const challenge = req.nextUrl.searchParams.get("hub.challenge") || new URL(req.url).searchParams.get("hub.challenge");
 
-    const expectedToken = process.env.META_WEBHOOK_VERIFY_TOKEN || process.env.WHATSAPP_VERIFY_TOKEN;
+    const expectedToken = (
+      process.env.META_WEBHOOK_VERIFY_TOKEN ||
+      process.env.WHATSAPP_VERIFY_TOKEN ||
+      process.env.VERIFY_TOKEN ||
+      ""
+    ).trim();
 
     if (!expectedToken) {
-      console.error("[WEBHOOK_VERIFICATION_ERROR] META_WEBHOOK_VERIFY_TOKEN is not configured on server.");
-      return new NextResponse("Server Configuration Error", { status: 500 });
-    }
-
-    if (mode === "subscribe" && token === expectedToken) {
-      console.log("[WEBHOOK_VERIFIED] Meta webhook challenge verified successfully.");
-      return new NextResponse(challenge, {
-        status: 200,
+      console.error("[WEBHOOK_VERIFICATION_ERROR] META_WEBHOOK_VERIFY_TOKEN is not configured in production environment variables.");
+      return new Response("Server Configuration Error: META_WEBHOOK_VERIFY_TOKEN is missing in production environment variables", {
+        status: 500,
         headers: { "Content-Type": "text/plain" },
       });
     }
 
-    console.warn("[WEBHOOK_VERIFICATION_FAILED] Verify token mismatch or invalid mode.");
-    return new NextResponse("Forbidden", { status: 403 });
+    const receivedToken = (token || "").trim();
+
+    if (mode === "subscribe" && receivedToken === expectedToken) {
+      console.log("[WEBHOOK_VERIFIED] Meta webhook challenge verified successfully.");
+      return new Response(challenge || "", {
+        status: 200,
+        headers: {
+          "Content-Type": "text/plain",
+          "Cache-Control": "no-store",
+        },
+      });
+    }
+
+    console.warn(`[WEBHOOK_VERIFICATION_FAILED] mode=${mode} received_token_length=${receivedToken.length} expected_token_length=${expectedToken.length}`);
+    return new Response("Forbidden", {
+      status: 403,
+      headers: { "Content-Type": "text/plain" },
+    });
   } catch (error: unknown) {
     console.error("[WEBHOOK_VERIFICATION_ERROR]", error);
-    return new NextResponse("Internal Server Error", { status: 500 });
+    return new Response("Internal Server Error", {
+      status: 500,
+      headers: { "Content-Type": "text/plain" },
+    });
   }
 }
 

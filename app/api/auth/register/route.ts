@@ -8,13 +8,55 @@ import Automation from "@/models/Automation";
 import { signToken, setSessionCookie } from "@/lib/auth/session";
 
 export async function POST(request: Request) {
+  const bypassAuth = process.env.BYPASS_AUTH === "true" || process.env.NEXT_PUBLIC_BYPASS_AUTH === "true";
+
   try {
-    await connectDB();
     const { name, email, password, businessName } = await request.json();
 
     if (!name || !email || !password) {
       return NextResponse.json(
         { success: false, message: "Missing required fields: name, email, password" },
+        { status: 400 }
+      );
+    }
+
+    try {
+      await connectDB();
+    } catch (dbError: unknown) {
+      console.warn("[REGISTER] Database connection failed:", dbError);
+      
+      // If bypass mode is active, allow user to log in and access dashboard
+      if (bypassAuth) {
+        const token = signToken({
+          userId: "660000000000000000000001",
+          email: email.toLowerCase(),
+          workspaceId: "660000000000000000000002",
+        });
+        await setSessionCookie(token);
+
+        return NextResponse.json({
+          success: true,
+          user: {
+            id: "660000000000000000000001",
+            name,
+            email: email.toLowerCase(),
+          },
+          workspace: {
+            id: "660000000000000000000002",
+            name: businessName || `${name}'s Workspace`,
+          },
+        });
+      }
+
+      const errMsg = (dbError as Error).message || "";
+      const isBadAuth = errMsg.includes("bad auth") || errMsg.includes("authentication failed");
+      return NextResponse.json(
+        {
+          success: false,
+          message: isBadAuth
+            ? "MongoDB Atlas authentication failed. Please verify your database username and password in MongoDB Atlas (Security > Database Access)."
+            : "Database connection failed. Please check your MongoDB Atlas cluster connection.",
+        },
         { status: 400 }
       );
     }

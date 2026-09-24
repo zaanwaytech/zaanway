@@ -10,6 +10,12 @@ export interface SessionPayload {
   workspaceId?: string;
 }
 
+export const DEFAULT_BYPASS_SESSION: SessionPayload = {
+  userId: "660000000000000000000001",
+  email: "admin@zaanway.in",
+  workspaceId: "660000000000000000000002",
+};
+
 /**
  * Signs a session payload into a JWT.
  */
@@ -57,24 +63,32 @@ export async function clearSessionCookie() {
   });
 }
 
+/**
+ * Retrieves current session. Supports authentication bypass when configured.
+ */
 export async function getSession(): Promise<SessionPayload | null> {
+  const bypassAuth = process.env.BYPASS_AUTH === "true" || process.env.NEXT_PUBLIC_BYPASS_AUTH === "true";
+
   try {
     const cookieStore = await cookies();
     const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
-    if (!token) {
-      console.log("[getSession] No session cookie found in request.");
-      return null;
+
+    if (token) {
+      const payload = verifyToken(token);
+      if (payload) return payload;
     }
 
-    const payload = verifyToken(token);
-    if (!payload) {
-      console.log("[getSession] Token verification failed.");
-      return null;
+    // If no valid cookie and bypass is active, return default session
+    if (bypassAuth) {
+      return DEFAULT_BYPASS_SESSION;
     }
 
-    return payload;
+    return null;
   } catch (error) {
     console.error("[getSession] Unexpected error getting session:", error);
+    if (bypassAuth) {
+      return DEFAULT_BYPASS_SESSION;
+    }
     return null;
   }
 }

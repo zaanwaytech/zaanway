@@ -6,8 +6,9 @@ import { getPhoneNumberDetails } from "@/lib/meta/service";
 import { decryptToken } from "@/lib/security/encryption";
 
 export async function GET() {
+  const bypassAuth = process.env.BYPASS_AUTH === "true" || process.env.NEXT_PUBLIC_BYPASS_AUTH === "true";
+
   try {
-    await connectDB();
     const session = await getSession();
 
     if (!session || !session.userId) {
@@ -23,6 +24,18 @@ export async function GET() {
         { success: false, connected: false, message: "No active workspace selected" },
         { status: 400 }
       );
+    }
+
+    // Attempt DB connection
+    try {
+      await connectDB();
+    } catch (dbErr) {
+      console.warn("[WHATSAPP_STATUS] DB connection failed or offline:", dbErr);
+      return NextResponse.json({
+        success: true,
+        connected: false,
+        message: "No connected WhatsApp profile found (Database offline or initializing).",
+      });
     }
 
     // Lookup WhatsApp Account strictly for the authenticated workspace

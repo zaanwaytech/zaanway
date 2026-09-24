@@ -8,8 +8,9 @@ import Contact from "@/models/Contact";
 import AutomationRun from "@/models/AutomationRun";
 
 export async function GET() {
+  const bypassAuth = process.env.BYPASS_AUTH === "true" || process.env.NEXT_PUBLIC_BYPASS_AUTH === "true";
+
   try {
-    await connectDB();
     const session = await getSession();
 
     if (!session || !session.userId) {
@@ -19,6 +20,30 @@ export async function GET() {
     const workspaceId = session.workspaceId;
     if (!workspaceId) {
       return NextResponse.json({ success: false, message: "No active workspace" }, { status: 400 });
+    }
+
+    try {
+      await connectDB();
+    } catch (dbErr) {
+      console.warn("[ANALYTICS] DB connection offline:", dbErr);
+      return NextResponse.json({
+        success: true,
+        metrics: {
+          messagesReceived: 0,
+          messagesSent: 0,
+          messagesToday: 0,
+          totalConversations: 0,
+          activeConversations: 0,
+          totalContacts: 0,
+          automationExecutions: 0,
+          automationFailures: 0,
+          connectedPhoneNumber: null,
+          verifiedName: null,
+          connectionStatus: "disconnected",
+          wabaId: null,
+          qualityRating: null,
+        },
+      });
     }
 
     // 1. WhatsApp Connection Status strictly for this tenant
@@ -73,6 +98,26 @@ export async function GET() {
     });
   } catch (error: unknown) {
     console.error("[ANALYTICS_GET_ERROR]", error);
+    if (bypassAuth) {
+      return NextResponse.json({
+        success: true,
+        metrics: {
+          messagesReceived: 0,
+          messagesSent: 0,
+          messagesToday: 0,
+          totalConversations: 0,
+          activeConversations: 0,
+          totalContacts: 0,
+          automationExecutions: 0,
+          automationFailures: 0,
+          connectedPhoneNumber: null,
+          verifiedName: null,
+          connectionStatus: "disconnected",
+          wabaId: null,
+          qualityRating: null,
+        },
+      });
+    }
     return NextResponse.json(
       { success: false, message: "Failed to calculate analytics" },
       { status: 500 }

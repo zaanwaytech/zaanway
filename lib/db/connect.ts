@@ -22,13 +22,19 @@ export async function connectDB(): Promise<typeof mongoose> {
     throw new Error("Please define MONGODB_URI or DATABASE_URL in environment variables");
   }
 
-  if (cached.conn) {
+  if (cached.conn && mongoose.connection.readyState === 1) {
     return cached.conn;
+  }
+
+  if (cached.conn && mongoose.connection.readyState !== 1) {
+    cached.conn = null;
+    cached.promise = null;
   }
 
   if (!cached.promise) {
     const opts = {
       bufferCommands: false,
+      serverSelectionTimeoutMS: 4000, // Fail fast in 4s instead of hanging for 30s
     };
 
     cached.promise = mongoose.connect(uri, opts).then((mongooseInstance) => {
