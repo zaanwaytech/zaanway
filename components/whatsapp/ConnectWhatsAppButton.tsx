@@ -1,26 +1,15 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import { FaWhatsapp } from "react-icons/fa";
 
-declare global {
-  interface Window {
-    FB: {
-      init: (options: {
-        appId: string;
-        cookie: boolean;
-        xfbml: boolean;
-        version: string;
-      }) => void;
-      login: (
-        callback: (response: { authResponse?: { code: string } }) => void,
-        options: Record<string, unknown>
-      ) => void;
-    };
-  }
+interface EmbeddedSignupData {
+  business_id?: string;
+  waba_id?: string;
+  phone_number_id?: string;
 }
 
-const CONFIG_ID = process.env.NEXT_PUBLIC_META_CONFIG_ID || "1995892224390931";
+const CONFIG_ID = process.env.NEXT_PUBLIC_META_CONFIG_ID || "1405070211688783";
 
 export default function ConnectWhatsAppButton({
   onConnectSuccess,
@@ -33,19 +22,21 @@ export default function ConnectWhatsAppButton({
 }) {
   const [loading, setLoading] = useState(false);
   const [connected, setConnected] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const waCodeRef = useRef<string | null>(null);
-  const waDataRef = useRef<any | null>(null);
+  const waDataRef = useRef<EmbeddedSignupData | null>(null);
 
-  const processConnection = async () => {
-    const code = waCodeRef.current || sessionStorage.getItem("wa_code");
+  const processConnection = useCallback(async () => {
+    const code = waCodeRef.current;
     const data = waDataRef.current;
 
     if (!code || !data) {
-      return; // Wait until both are available
+      return;
     }
 
     setLoading(true);
+    setErrorMsg(null);
 
     try {
       const res = await fetch("/api/whatsapp/connect", {
@@ -62,29 +53,27 @@ export default function ConnectWhatsAppButton({
       });
 
       const result = await res.json();
-      console.log(result);
       setLoading(false);
 
       if (result.success) {
         setConnected(true);
-        sessionStorage.removeItem("wa_code");
         waCodeRef.current = null;
         waDataRef.current = null;
-        alert("🎉 WhatsApp Connected Successfully!");
         if (onConnectSuccess) {
           onConnectSuccess(result.account);
         }
       } else {
-        alert(result.message || "Connection failed");
+        setErrorMsg(result.message || "Connection failed. Please try again.");
       }
-    } catch (err) {
-      console.error(err);
+    } catch (err: unknown) {
+      console.error("[META_CONNECT_ERROR]", err);
+      setErrorMsg("A network error occurred while connecting. Please try again.");
       setLoading(false);
     }
-  };
+  }, [onConnectSuccess]);
 
   useEffect(() => {
-    const handleMessage = async (event: MessageEvent) => {
+    const handleMessage = (event: MessageEvent) => {
       if (
         event.origin !== "https://www.facebook.com" &&
         event.origin !== "https://web.facebook.com"
@@ -95,53 +84,48 @@ export default function ConnectWhatsAppButton({
       try {
         let data = event.data;
         if (typeof event.data === "string") {
-          // ignore non-JSON messages like "cb=f00aa34..." safely
           try {
             data = JSON.parse(event.data);
-          } catch (e) {
+          } catch {
             return;
           }
         }
 
         if (data?.type === "WA_EMBEDDED_SIGNUP" && data?.event === "FINISH") {
-          console.log("Meta Embedded Signup FINISH event received:", data);
-          waDataRef.current = data.data;
+          console.log("[META_EMBEDDED_SIGNUP] FINISH event received");
+          waDataRef.current = data.data as EmbeddedSignupData;
           processConnection();
         }
       } catch (err) {
-        console.error(err);
+        console.error("[META_EVENT_PARSE_ERROR]", err);
       }
     };
 
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
-  }, [onConnectSuccess]);
+  }, [processConnection]);
 
   const connectWhatsApp = () => {
     if (!window.FB) {
-      alert("Facebook SDK not loaded.");
+      alert("Meta Facebook SDK is still loading. Please try again in a few seconds.");
       return;
     }
 
     setLoading(true);
+    setErrorMsg(null);
     waCodeRef.current = null;
     waDataRef.current = null;
 
     window.FB.login(
       (response: { authResponse?: { code: string } }) => {
-        console.log("Facebook Response:", response);
-        
         if (!response.authResponse?.code) {
           setLoading(false);
-          alert("User cancelled login");
+          setErrorMsg("Meta authorization was cancelled or not completed.");
           return;
         }
 
         const code = response.authResponse.code;
-        console.log("Authorization Code received.");
-        
         waCodeRef.current = code;
-        sessionStorage.setItem("wa_code", code);
         processConnection();
       },
       {
@@ -159,21 +143,25 @@ export default function ConnectWhatsAppButton({
   };
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <button
         onClick={connectWhatsApp}
         disabled={loading}
-        className="bg-green-600 hover:bg-green-700 transition-all text-white px-8 py-4 rounded-xl flex items-center gap-3 disabled:opacity-50"
+        className="bg-emerald-600 hover:bg-emerald-700 transition-all text-white font-bold px-7 py-3.5 rounded-2xl flex items-center gap-3 shadow-md hover:shadow-lg disabled:opacity-50 text-sm cursor-pointer"
       >
-        <FaWhatsapp size={22} />
-        {loading ? "Opening Meta..." : "Connect WhatsApp"}
+        <FaWhatsapp size={20} />
+        {loading ? "Connecting to Meta..." : "Connect WhatsApp"}
       </button>
 
+      {errorMsg && (
+        <div className="rounded-xl bg-red-50 border border-red-200 p-3.5 text-xs text-red-700 font-medium">
+          {errorMsg}
+        </div>
+      )}
+
       {connected && (
-        <div className="rounded-xl bg-green-50 border border-green-200 p-4">
-          <p className="font-semibold text-green-700">
-            ✅ WhatsApp Connected Successfully
-          </p>
+        <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-3.5 text-xs text-emerald-800 font-bold">
+          WhatsApp Connected Successfully!
         </div>
       )}
     </div>

@@ -3,6 +3,14 @@ import { connectDB } from "@/lib/db/connect";
 import { getSession } from "@/lib/auth/session";
 import { verifyWorkspaceAccess } from "@/lib/auth/permissions";
 import WhatsAppAccount from "@/models/WhatsAppAccount";
+import {
+  exchangeCodeForToken,
+  getPhoneNumberDetails,
+  getWabaDetails,
+  registerPhoneNumber,
+  subscribeWabaToWebhook,
+} from "@/lib/meta/service";
+import { encryptToken } from "@/lib/security/encryption";
 
 export async function POST(req: NextRequest) {
   try {
@@ -11,172 +19,159 @@ export async function POST(req: NextRequest) {
 
     if (!session || !session.userId) {
       return NextResponse.json(
-        { success: false, message: "Unauthorized" },
+        { success: false, message: "Unauthorized: Please log in." },
         { status: 401 }
       );
     }
 
-    const body = await req.json();
-    const {
-      workspaceId,
-      code,
-      businessId,
-      wabaId,
-      phoneNumberId,
-      displayPhoneNumber,
-      mock,
-    } = body;
+    // Strictly derive workspaceId from authenticated session to enforce tenant isolation
+    const workspaceId = session.workspaceId;
+    if (!workspaceId) {
+      return NextResponse.json(
+        { success: false, message: "No active workspace selected in session." },
+        { status: 400 }
+      );
+    }
 
-    const targetWorkspaceId = workspaceId || session.workspaceId;
-
-    // Verify workspace access and Owner/Admin role
-    const member = await verifyWorkspaceAccess(targetWorkspaceId, session.userId, ["Owner", "Admin"]);
+    // Enforce role authorization: Only Owner or Admin can link WhatsApp
+    const member = await verifyWorkspaceAccess(workspaceId, session.userId, ["Owner", "Admin"]);
     if (!member) {
       return NextResponse.json(
-        { success: false, message: "Forbidden: Owner or Admin role required" },
+        { success: false, message: "Forbidden: Owner or Admin role required." },
         { status: 403 }
       );
     }
 
-    // Handle mock connection (Onboarding or Local development)
-    if (mock || process.env.WHATSAPP_MOCK_MODE === "true") {
-      const displayNum = displayPhoneNumber || "+1 555 019 2831";
+    const body = await req.json();
+    const { code, wabaId, phoneNumberId, mock } = body;
+
+    // Handle Mock Connection for local testing without real Meta credentials
+    if (mock || process.env.WHATSAPP_MOCK_MODE === "true" || code === "mock_code") {
+      const mockEncrypted = encryptToken("mock_access_token_12345");
       const account = await WhatsAppAccount.findOneAndUpdate(
-        { workspaceId: targetWorkspaceId },
+        { workspaceId },
         {
-          wabaId: wabaId || "mock_waba_id_12345",
-          phoneNumberId: phoneNumberId || "mock_phone_id_67890",
-          displayPhoneNumber: displayNum,
-          accessTokenEncrypted: "mock_encrypted_access_token_abcde",
+          wabaId: wabaId || "mock_waba_id_102086029",
+          phoneNumberId: phoneNumberId || "mock_phone_id_98765",
+          displayPhoneNumber: "+91 98765 43210",
+          verifiedName: "Mock Business Profile",
+          businessName: "Zaanway Demo Workspace",
+          accessTokenEncrypted: mockEncrypted,
+          tokenType: "Bearer",
           verified: true,
           status: "connected",
+          webhookStatus: "active",
+          lastError: null,
         },
         { new: true, upsert: true }
       );
 
+      console.log(`[WHATSAPP_CONNECT] workspaceId=${workspaceId} mode=mock status=success`);
+
       return NextResponse.json({
         success: true,
-        message: "Mock WhatsApp linked successfully",
+        message: "Mock WhatsApp linked successfully.",
         account: {
           id: account._id,
           displayPhoneNumber: account.displayPhoneNumber,
+          verifiedName: account.verifiedName,
           wabaId: account.wabaId,
+          phoneNumberId: account.phoneNumberId,
+          status: account.status,
         },
       });
     }
 
-    // If real Meta sign up code is provided
-    if (!code || !businessId || !wabaId || !phoneNumberId) {
+    // Require real authorization code and identifiers
+    if (!code || !wabaId || !phoneNumberId) {
       return NextResponse.json(
-        { success: false, message: "Missing Meta authorization parameters" },
+        { success: false, message: "Missing required Meta authorization parameters (code, wabaId, phoneNumberId)." },
         { status: 400 }
       );
     }
 
-    const appId = process.env.META_APP_ID;
-    const appSecret = process.env.META_APP_SECRET;
-    const apiVersion = process.env.META_API_VERSION || "v20.0";
-
-    if (!appId || !appSecret) {
+    // 1. Securely exchange code for Meta access token
+    const tokenResult = await exchangeCodeForToken(code);
+    if (!tokenResult.success || !tokenResult.data?.accessToken) {
       return NextResponse.json(
-        { success: false, message: "Meta configuration missing on server" },
-        { status: 500 }
-      );
-    }
-
-    // Exchange auth code for access token
-    const tokenUrl = `https://graph.facebook.com/${apiVersion}/oauth/access_token?client_id=${appId}&client_secret=${appSecret}&code=${code}`;
-    const tokenRes = await fetch(tokenUrl);
-    const tokenData = await tokenRes.json();
-
-    if (!tokenRes.ok || tokenData.error) {
-      console.error("Meta Token Exchange Error:", tokenData.error);
-      return NextResponse.json(
-        { success: false, message: tokenData.error?.message || "Failed to exchange Meta code" },
+        { success: false, message: tokenResult.error || "Failed to exchange Meta authorization code." },
         { status: 400 }
       );
     }
 
-    const clientAccessToken = tokenData.access_token;
+    const rawAccessToken = tokenResult.data.accessToken;
 
-    // Register phone number
-    try {
-      const registerUrl = `https://graph.facebook.com/${apiVersion}/${phoneNumberId}/register`;
-      await fetch(registerUrl, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${clientAccessToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          messaging_product: "whatsapp",
-          pin: "123456",
-        }),
-      });
-    } catch (regErr) {
-      console.error("Error registering phone number:", regErr);
+    // 2. Fetch Phone Number details from Meta Cloud API
+    const phoneDetailsResult = await getPhoneNumberDetails(phoneNumberId, rawAccessToken);
+    const displayPhoneNumber = phoneDetailsResult.data?.displayPhoneNumber || "Verified WhatsApp Number";
+    const verifiedName = phoneDetailsResult.data?.verifiedName || "";
+    const qualityRating = phoneDetailsResult.data?.qualityRating || "UNKNOWN";
+    const messagingLimit = phoneDetailsResult.data?.messagingLimit || "TIER_1K";
+
+    // 3. Fetch WABA details
+    const wabaDetailsResult = await getWabaDetails(wabaId, rawAccessToken);
+    const businessName = wabaDetailsResult.data?.name || verifiedName || "My Business";
+
+    // 4. Register Phone Number with Cloud API
+    const registerResult = await registerPhoneNumber(phoneNumberId, rawAccessToken);
+    if (!registerResult.success) {
+      console.warn(`[WHATSAPP_CONNECT] Warning: Register phone returned error: ${registerResult.error}`);
     }
 
-    // Subscribe WABA
-    try {
-      const subscribeUrl = `https://graph.facebook.com/${apiVersion}/${wabaId}/subscribed_apps`;
-      await fetch(subscribeUrl, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${clientAccessToken}`,
-        },
-      });
-    } catch (subErr) {
-      console.error("Error subscribing app to WABA:", subErr);
+    // 5. Subscribe WABA to Webhooks
+    const subscribeResult = await subscribeWabaToWebhook(wabaId, rawAccessToken);
+    if (!subscribeResult.success) {
+      console.warn(`[WHATSAPP_CONNECT] Warning: Subscribe WABA returned error: ${subscribeResult.error}`);
     }
 
-    // Fetch actual phone number details
-    let realDisplayPhoneNumber = displayPhoneNumber || "Verified Number";
-    try {
-      const phoneUrl = `https://graph.facebook.com/${apiVersion}/${phoneNumberId}`;
-      const phoneRes = await fetch(phoneUrl, {
-        headers: {
-          Authorization: `Bearer ${clientAccessToken}`,
-        },
-      });
-      if (phoneRes.ok) {
-        const phoneData = await phoneRes.json();
-        if (phoneData.display_phone_number) {
-          realDisplayPhoneNumber = phoneData.display_phone_number;
-        }
-      }
-    } catch (err) {
-      console.error("Error fetching phone number:", err);
-    }
+    // 6. Encrypt access token at rest using AES-256-GCM
+    const encryptedAccessToken = encryptToken(rawAccessToken);
 
-    // Save in Database under active workspace
+    // 7. Save Connection exclusively under the authenticated workspace
     const account = await WhatsAppAccount.findOneAndUpdate(
-      { workspaceId: targetWorkspaceId },
+      { workspaceId },
       {
         wabaId,
         phoneNumberId,
-        displayPhoneNumber: realDisplayPhoneNumber,
-        accessTokenEncrypted: clientAccessToken, // In prod you can encrypt this token
+        displayPhoneNumber,
+        verifiedName,
+        businessName,
+        accessTokenEncrypted: encryptedAccessToken,
+        tokenType: "Bearer",
         verified: true,
         status: "connected",
+        webhookStatus: subscribeResult.success ? "active" : "pending",
+        lastError: null,
+        qualityRating,
+        messagingLimit,
       },
       { new: true, upsert: true }
     );
 
+    console.log(
+      `[WHATSAPP_CONNECT] workspaceId=${workspaceId} wabaId=${wabaId} phoneNumberId=${phoneNumberId} status=success`
+    );
+
+    // Return ONLY safe metadata to the frontend (NEVER return access token or secrets)
     return NextResponse.json({
       success: true,
-      message: "WhatsApp Business Account linked successfully",
+      message: "WhatsApp Business Account linked successfully.",
       account: {
         id: account._id,
         displayPhoneNumber: account.displayPhoneNumber,
+        verifiedName: account.verifiedName,
+        businessName: account.businessName,
         wabaId: account.wabaId,
         phoneNumberId: account.phoneNumberId,
+        status: account.status,
+        webhookStatus: account.webhookStatus,
+        qualityRating: account.qualityRating,
       },
     });
   } catch (error: unknown) {
-    console.error("WhatsApp Connection Error:", error);
+    console.error("[WHATSAPP_ERROR] operation=connect route_error", error);
     return NextResponse.json(
-      { success: false, message: (error as Error).message || "Internal server error" },
+      { success: false, message: "An internal server error occurred while connecting WhatsApp." },
       { status: 500 }
     );
   }

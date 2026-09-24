@@ -4,7 +4,7 @@ import { getSession } from "@/lib/auth/session";
 import { verifyWorkspaceAccess } from "@/lib/auth/permissions";
 import Automation from "@/models/Automation";
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   try {
     await connectDB();
     const session = await getSession();
@@ -13,11 +13,10 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
     }
 
-    const { searchParams } = new URL(req.url);
-    const workspaceId = searchParams.get("workspaceId") || session.workspaceId;
-
+    // Derive strictly from session
+    const workspaceId = session.workspaceId;
     if (!workspaceId) {
-      return NextResponse.json({ success: false, message: "Workspace ID is required" }, { status: 400 });
+      return NextResponse.json({ success: false, message: "Workspace not selected" }, { status: 400 });
     }
 
     const member = await verifyWorkspaceAccess(workspaceId, session.userId);
@@ -28,10 +27,10 @@ export async function GET(req: NextRequest) {
     const automations = await Automation.find({ workspaceId }).sort({ createdAt: -1 });
 
     return NextResponse.json({ success: true, automations });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("GET Automations Error:", error);
     return NextResponse.json(
-      { success: false, message: error.message || "Failed to fetch automations" },
+      { success: false, message: (error as Error).message || "Failed to fetch automations" },
       { status: 500 }
     );
   }
@@ -46,28 +45,37 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
     }
 
-    const body = await req.json();
-    const { workspaceId, name, trigger, actions, isActive } = body;
-    const targetWorkspaceId = workspaceId || session.workspaceId;
+    // Derive strictly from session (never trust req.body.workspaceId)
+    const workspaceId = session.workspaceId;
+    if (!workspaceId) {
+      return NextResponse.json({ success: false, message: "Workspace not selected" }, { status: 400 });
+    }
 
-    const member = await verifyWorkspaceAccess(targetWorkspaceId, session.userId, ["Owner", "Admin"]);
+    const member = await verifyWorkspaceAccess(workspaceId, session.userId, ["Owner", "Admin"]);
     if (!member) {
-      return NextResponse.json({ success: false, message: "Forbidden" }, { status: 403 });
+      return NextResponse.json({ success: false, message: "Forbidden: Owner or Admin required" }, { status: 403 });
+    }
+
+    const body = await req.json();
+    const { name, trigger, actions, isActive } = body;
+
+    if (!name || !trigger?.type) {
+      return NextResponse.json({ success: false, message: "Rule name and trigger are required" }, { status: 400 });
     }
 
     const automation = await Automation.create({
-      workspaceId: targetWorkspaceId,
+      workspaceId,
       name,
       trigger,
-      actions,
+      actions: Array.isArray(actions) ? actions : [],
       isActive: isActive !== undefined ? isActive : true,
     });
 
     return NextResponse.json({ success: true, automation }, { status: 201 });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("POST Automation Error:", error);
     return NextResponse.json(
-      { success: false, message: error.message || "Failed to create automation" },
+      { success: false, message: (error as Error).message || "Failed to create automation" },
       { status: 500 }
     );
   }

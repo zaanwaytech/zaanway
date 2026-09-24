@@ -3,8 +3,11 @@ import { connectDB } from "@/lib/db/connect";
 import { getSession } from "@/lib/auth/session";
 import { verifyWorkspaceAccess } from "@/lib/auth/permissions";
 import WhatsAppAccount from "@/models/WhatsAppAccount";
+import Automation from "@/models/Automation";
+import { deregisterPhoneNumber } from "@/lib/meta/service";
+import { decryptToken } from "@/lib/security/encryption";
 
-export async function DELETE() {
+export async function POST() {
   try {
     await connectDB();
     const session = await getSession();
@@ -24,7 +27,7 @@ export async function DELETE() {
       );
     }
 
-    // Verify workspace access and Owner/Admin role
+    // Role verification: Only Owner or Admin can disconnect WhatsApp
     const member = await verifyWorkspaceAccess(workspaceId, session.userId, ["Owner", "Admin"]);
     if (!member) {
       return NextResponse.json(
@@ -36,45 +39,47 @@ export async function DELETE() {
     const account = await WhatsAppAccount.findOne({ workspaceId });
     if (!account) {
       return NextResponse.json(
-        { success: false, message: "No connected WhatsApp profile found" },
+        { success: false, message: "No active WhatsApp connection found for this workspace." },
         { status: 404 }
       );
     }
 
-    // Attempt to deregister from Meta
-    const isMock = process.env.WHATSAPP_MOCK_MODE === "true" || account.accessTokenEncrypted.startsWith("mock_");
-    
-    if (!isMock && account.phoneNumberId) {
-      try {
-        const apiVersion = process.env.META_API_VERSION || "v20.0";
-        const systemToken = process.env.WHATSAPP_ACCESS_TOKEN;
-        const tokenToUse = systemToken || account.accessTokenEncrypted;
-
-        const deregisterUrl = `https://graph.facebook.com/${apiVersion}/${account.phoneNumberId}/deregister`;
-        await fetch(deregisterUrl, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${tokenToUse}`,
-            "Content-Type": "application/json",
-          },
-        });
-      } catch (err) {
-        console.error("Failed to deregister from Meta API:", err);
+    // Try deregistering from Meta if live credentials exist
+    try {
+      if (!account.accessTokenEncrypted.includes("mock_access_token")) {
+        const token = decryptToken(account.accessTokenEncrypted);
+        await deregisterPhoneNumber(account.phoneNumberId, token);
       }
+    } catch (deregErr) {
+      console.warn("[WHATSAPP_DISCONNECT] Meta deregistration warning:", deregErr);
     }
 
-    // Delete the account from our DB
-    await WhatsAppAccount.deleteOne({ _id: account._id });
+    // Update connection status to 'disconnected' and wipe encrypted credentials
+    // IMPORTANT: Preserve historical messages, contacts, and conversations!
+    account.status = "disconnected";
+    account.accessTokenEncrypted = "REVOKED";
+    account.lastError = "Account disconnected by user.";
+    await account.save();
+
+    // Pause all automations for this workspace to avoid sending errors
+    await Automation.updateMany({ workspaceId }, { isActive: false });
+
+    console.log(`[WHATSAPP_DISCONNECT] workspaceId=${workspaceId} status=disconnected`);
 
     return NextResponse.json({
       success: true,
-      message: "WhatsApp account disconnected and removed successfully",
+      message: "WhatsApp account has been successfully disconnected. Historical data preserved.",
     });
   } catch (error: unknown) {
-    console.error("WhatsApp Disconnect Error:", error);
+    console.error("[WHATSAPP_ERROR] operation=disconnect", error);
     return NextResponse.json(
-      { success: false, message: (error as Error).message || "Internal server error" },
+      { success: false, message: "Failed to disconnect WhatsApp account." },
       { status: 500 }
     );
   }
+}
+
+// Support DELETE as well for compatibility
+export async function DELETE() {
+  return POST();
 }

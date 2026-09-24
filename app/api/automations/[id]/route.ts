@@ -26,6 +26,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       return NextResponse.json({ success: false, message: "Forbidden" }, { status: 403 });
     }
 
+    // Guard: Prevent reassigning workspaceId
+    delete body.workspaceId;
+
     const updatedAutomation = await Automation.findByIdAndUpdate(
       id,
       { $set: body },
@@ -33,10 +36,10 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     );
 
     return NextResponse.json({ success: true, automation: updatedAutomation });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("PUT Automation Error:", error);
     return NextResponse.json(
-      { success: false, message: error.message || "Failed to update automation" },
+      { success: false, message: (error as Error).message || "Failed to update automation" },
       { status: 500 }
     );
   }
@@ -66,10 +69,10 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     await Automation.findByIdAndDelete(id);
 
     return NextResponse.json({ success: true, message: "Automation deleted successfully" });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("DELETE Automation Error:", error);
     return NextResponse.json(
-      { success: false, message: error.message || "Failed to delete automation" },
+      { success: false, message: (error as Error).message || "Failed to delete automation" },
       { status: 500 }
     );
   }

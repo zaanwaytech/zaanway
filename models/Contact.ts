@@ -37,6 +37,12 @@ const ContactSchema = new Schema(
       type: String,
       default: "WhatsApp",
     },
+    // Dynamic key-value store for business-defined custom contact fields
+    // e.g. booking_date, booking_time, service, customer_type, order_id
+    customFields: {
+      type: Schema.Types.Mixed,
+      default: {},
+    },
   },
   {
     timestamps: true,

@@ -13,15 +13,40 @@ const AutomationSchema = new Schema(
       required: true,
       trim: true,
     },
+    description: {
+      type: String,
+      default: "",
+    },
     trigger: {
       type: {
         type: String,
-        enum: ["incoming_message", "keyword", "button_clicked", "list_selected", "new_contact", "tag_added"],
+        enum: [
+          "incoming_message",
+          "keyword",
+          "button_reply",
+          "list_reply",
+          "conversation_started",
+          "new_contact",
+          "tag_added",
+        ],
         required: true,
+      },
+      matching: {
+        type: String,
+        enum: ["exact", "contains"],
+        default: "exact",
       },
       keyword: {
         type: String,
         lowercase: true,
+        trim: true,
+      },
+      buttonId: {
+        type: String,
+        trim: true,
+      },
+      listRowId: {
+        type: String,
         trim: true,
       },
     },
@@ -37,10 +62,14 @@ const AutomationSchema = new Schema(
             "send_template",
             "send_interactive_buttons",
             "send_interactive_list",
+            "condition",
+            "update_contact_field",
             "add_tag",
             "remove_tag",
             "assign_agent",
             "wait",
+            "call_webhook",
+            "end_automation",
           ],
           required: true,
         },
@@ -49,7 +78,7 @@ const AutomationSchema = new Schema(
         },
       },
     ],
-    // For storing React Flow state (nodes, edges) in later phases
+    // For storing visual flow builder graph data
     flowData: {
       type: Schema.Types.Mixed,
     },
@@ -63,5 +92,7 @@ const AutomationSchema = new Schema(
     timestamps: true,
   }
 );
+
+AutomationSchema.index({ workspaceId: 1, isActive: 1 });
 
 export default mongoose.models.Automation || mongoose.model("Automation", AutomationSchema);

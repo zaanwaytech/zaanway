@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/db/connect";
 import { getSession } from "@/lib/auth/session";
 import WhatsAppAccount from "@/models/WhatsAppAccount";
+import { getPhoneNumberDetails } from "@/lib/meta/service";
+import { decryptToken } from "@/lib/security/encryption";
 
 export async function GET() {
   try {
@@ -23,74 +25,104 @@ export async function GET() {
       );
     }
 
+    // Lookup WhatsApp Account strictly for the authenticated workspace
     const account = await WhatsAppAccount.findOne({ workspaceId });
-    if (!account) {
+    if (!account || account.status === "disconnected") {
       return NextResponse.json({
         success: true,
         connected: false,
-        message: "No connected WhatsApp profile found for this workspace",
+        message: "No connected WhatsApp profile found for this workspace.",
       });
     }
 
-    // Handle Mock account mode
+    // Handle Mock mode
     if (
       process.env.WHATSAPP_MOCK_MODE === "true" ||
-      account.accessTokenEncrypted.startsWith("mock_")
+      account.accessTokenEncrypted.includes("mock_access_token")
     ) {
       return NextResponse.json({
         success: true,
         connected: true,
         phoneNumberId: account.phoneNumberId,
         displayPhoneNumber: account.displayPhoneNumber,
-        verifiedName: "Mock Business Profile",
+        verifiedName: account.verifiedName || "Mock Business Profile",
+        businessName: account.businessName || "Zaanway Demo",
         wabaId: account.wabaId,
-        platform: "Meta WhatsApp Cloud API (MOCK)",
+        status: account.status,
+        qualityRating: account.qualityRating || "GREEN",
+        messagingLimit: account.messagingLimit || "TIER_1K",
+        webhookStatus: account.webhookStatus || "active",
       });
     }
 
-    const apiVersion = process.env.META_API_VERSION || "v20.0";
-    const systemToken = process.env.WHATSAPP_ACCESS_TOKEN;
-    const tokenToUse = systemToken || account.accessTokenEncrypted;
+    // Decrypt the token server-side for live Meta verification
+    let token = "";
+    try {
+      token = decryptToken(account.accessTokenEncrypted);
+    } catch {
+      account.status = "error";
+      account.lastError = "Token decryption failed on server.";
+      await account.save();
 
-    const res = await fetch(
-      `https://graph.facebook.com/${apiVersion}/${account.phoneNumberId}`,
-      {
-        headers: {
-          Authorization: `Bearer ${tokenToUse}`,
-        },
-        cache: "no-store",
-      }
-    );
-
-    const data = await res.json();
-    if (!res.ok) {
       return NextResponse.json({
         success: true,
         connected: false,
-        error: data.error || data,
+        error: "WhatsApp security token could not be decrypted. Reconnection is required.",
       });
     }
 
-    if (data.display_phone_number) {
-      account.displayPhoneNumber = data.display_phone_number;
+    // Verify phone number details live against Meta
+    const phoneDetails = await getPhoneNumberDetails(account.phoneNumberId, token);
+    if (!phoneDetails.success || !phoneDetails.data) {
+      account.status = "error";
+      account.lastError = phoneDetails.error || "Meta verification failed";
       await account.save();
+
+      return NextResponse.json({
+        success: true,
+        connected: false,
+        error: phoneDetails.error || "Unable to reach WhatsApp Business Account. Please check connection.",
+        phoneNumberId: account.phoneNumberId,
+        displayPhoneNumber: account.displayPhoneNumber,
+        wabaId: account.wabaId,
+      });
     }
+
+    // Update synced fields
+    const updatedData = phoneDetails.data;
+    if (updatedData.displayPhoneNumber && updatedData.displayPhoneNumber !== account.displayPhoneNumber) {
+      account.displayPhoneNumber = updatedData.displayPhoneNumber;
+    }
+    if (updatedData.verifiedName) {
+      account.verifiedName = updatedData.verifiedName;
+    }
+    if (updatedData.qualityRating) {
+      account.qualityRating = updatedData.qualityRating;
+    }
+    if (updatedData.messagingLimit) {
+      account.messagingLimit = updatedData.messagingLimit;
+    }
+    account.status = "connected";
+    account.lastError = null;
+    await account.save();
 
     return NextResponse.json({
       success: true,
       connected: true,
-      phoneNumberId: data.id,
-      displayPhoneNumber: data.display_phone_number,
-      verifiedName: data.verified_name,
+      phoneNumberId: account.phoneNumberId,
+      displayPhoneNumber: account.displayPhoneNumber,
+      verifiedName: account.verifiedName || "Business Profile",
+      businessName: account.businessName || account.verifiedName || "My Business",
       wabaId: account.wabaId,
-      qualityRating: data.quality_rating,
-      messagingLimit: data.messaging_limit,
-      platform: "Meta WhatsApp Cloud API",
+      qualityRating: account.qualityRating,
+      messagingLimit: account.messagingLimit,
+      status: account.status,
+      webhookStatus: account.webhookStatus,
     });
   } catch (error: unknown) {
-    console.error("WhatsApp Status check error:", error);
+    console.error("[WHATSAPP_ERROR] operation=status route_error", error);
     return NextResponse.json(
-      { success: false, connected: false, message: (error as Error).message || "Internal server error" },
+      { success: false, connected: false, message: "Internal server error fetching connection status." },
       { status: 500 }
     );
   }

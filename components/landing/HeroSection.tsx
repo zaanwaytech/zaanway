@@ -2,7 +2,6 @@
 
 import React from "react";
 import { FiArrowRight, FiCheckCircle, FiPlay } from "react-icons/fi";
-import Image from "next/image";
 
 const HeroSection = () => {
   return (

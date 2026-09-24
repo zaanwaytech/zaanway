@@ -14,7 +14,7 @@ export const options = {
   },
 };
 
-export default function () {
+export default function runCrashTest() {
   // Change this to the API that hits Firebase
   const res = http.get('https://harikrishnakj.in/'); 
   

@@ -25,26 +25,22 @@ export default function FacebookSDK() {
     if (document.getElementById("facebook-jssdk")) return;
 
     window.fbAsyncInit = function () {
+      const appId = process.env.NEXT_PUBLIC_META_APP_ID || "1020860290572585";
       window.FB.init({
-        appId: "1020860290572585",
+        appId,
         cookie: true,
         xfbml: false,
-        version: "v23.0",
+        version: "v21.0",
       });
 
-      console.log("✅ Facebook SDK Ready");
+      console.log("✅ Meta / Facebook SDK initialized successfully.");
     };
 
     const script = document.createElement("script");
-
     script.id = "facebook-jssdk";
-
     script.async = true;
-
     script.defer = true;
-
     script.crossOrigin = "anonymous";
-
     script.src = "https://connect.facebook.net/en_US/sdk.js";
 
     document.body.appendChild(script);
